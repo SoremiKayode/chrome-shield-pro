@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chrome Shield Pro Inspector</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="options-wrap wide">
+    <section class="card dark">
+      <h1>Request inspector</h1>
+      <p class="subtle-light">Recent blocked activity for the current tab.</p>
+    </section>
+    <section class="card light">
+      <div class="section-title">Recent blocked items</div>
+      <div id="inspectorRecent" class="list"></div>
+    </section>
+    <section class="card light">
+      <div class="section-title">Top blocking rules on this tab</div>
+      <div id="inspectorRules" class="list"></div>
+    </section>
+  </main>
+  <script src="inspector.js"></script>
+</body>
+</html>

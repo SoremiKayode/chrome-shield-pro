@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chrome Shield Pro</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="popup-body">
+  <main class="popup-wrap">
+    <section class="hero card dark">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">CHROME EXTENSION BY CODEIGNITE</div>
+          <h1>Chrome Shield Pro</h1>
+        </div>
+        <label class="toggle"><input id="enabledToggle" type="checkbox"><span></span></label>
+      </div>
+      <div class="status-line">Protection <strong id="statusText">Enabled</strong></div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="label">Total blocked</div><div id="totalBlocked" class="value">0</div></div>
+        <div class="stat-box"><div class="label">Popups blocked</div><div id="popupBlocked" class="value">0</div></div>
+      </div>
+    </section>
+
+    <section class="card light">
+      <div class="row between stretch-on-mobile">
+        <div>
+          <div class="label">Current website</div>
+          <strong id="siteHost">-</strong>
+        </div>
+        <button id="allowlistBtn" class="pill secondary">Allowlist site</button>
+      </div>
+      <div class="actions-grid three">
+        <button id="pickElement" class="pill primary">Pick element</button>
+        <button id="openInspector" class="pill secondary">Request inspector</button>
+        <button id="openOptions" class="pill secondary">Settings</button>
+      </div>
+      <div class="subtle" id="updatedAt">Last rules update: -</div>
+    </section>
+
+    <section class="card light">
+      <div class="section-title">Top blocking rules on this tab</div>
+      <div id="rulesList" class="list compact"></div>
+    </section>
+
+    <section class="card light">
+      <div class="section-title">Blocked ad domains on this tab</div>
+      <div id="domainList" class="list compact"></div>
+    </section>
+
+    <section class="card light">
+      <div class="section-title">Recent blocked items</div>
+      <div id="recentItems" class="list compact"></div>
+    </section>
+
+    <section class="card light support-card">
+      <div>
+        <div class="section-title no-margin">Support development</div>
+        <div class="subtle">Help keep filter updates and new protections coming.</div>
+      </div>
+      <button id="supportBtn" class="pill donate">Donate</button>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chrome Shield Pro Settings</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main class="options-wrap wide">
+    <section class="card dark"><h1>Chrome Shield Pro Settings</h1><p class="subtle-light">Stronger popup prevention, DNR network blocking, request inspector, top rules, recent items, and support link.</p></section>
+    <section class="card light grid-two">
+      <label class="check"><input id="popupBlockingEnabled" type="checkbox"> Block likely ad popups before navigation completes</label>
+      <label class="check"><input id="cosmeticBlockingEnabled" type="checkbox"> Enable cosmetic cleanup</label>
+    </section>
+    <section class="card light">
+      <h2>Custom blocked domains</h2>
+      <textarea id="customBlockDomains" rows="8" placeholder="one domain per line"></textarea>
+    </section>
+    <section class="card light">
+      <h2>Allowlist</h2>
+      <textarea id="allowlist" rows="6" placeholder="one host per line"></textarea>
+    </section>
+    <section class="card light">
+      <h2>Per-site custom CSS selectors</h2>
+      <textarea id="customCssSelectors" rows="8" placeholder='{"example.com":[".sponsored","#ad-sidebar"]}'></textarea>
+    </section>
+    <section class="card light row between stretch-on-mobile">
+      <button id="saveBtn" class="pill primary">Save settings</button>
+      <div class="row gap-sm"><button id="openInspector" class="pill secondary">Open inspector</button><button id="supportBtn" class="pill donate">Support development</button></div>
+    </section>
+    <span id="saveStatus" class="subtle"></span>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

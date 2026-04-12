@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Chrome Shield Pro",
+  "version": "2.0.0",
+  "description": "Chrome ad blocker with stronger popup prevention, request inspector, top rules, recent blocked items, and support section.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "webRequest",
+    "scripting",
+    "alarms",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Chrome Shield Pro",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page-guard.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon128.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
