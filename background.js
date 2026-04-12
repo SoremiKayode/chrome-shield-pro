@@ -100,6 +100,11 @@ function remotePopupLikely(sourceUrl, targetUrl) {
   return adLikeHost(targetHost) || adLikeUrl(targetUrl);
 }
 
+function isBrowserNewTabUrl(url) {
+  const value = String(url || '').toLowerCase();
+  return value === 'chrome://newtab/' || value === 'chrome://newtab' || value === 'about:newtab';
+}
+
 function ensureTab(tabId) {
   if (tabId < 0) return null;
   state.perTab[tabId] = state.perTab[tabId] || { total: 0, hosts: {}, rules: {}, recent: [], pageUrl: '' };
@@ -152,6 +157,7 @@ function learnAdDomain(url) {
 
 async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, targetUrl, action, forceBlock = false) {
   if (!sourceUrl || !targetUrl) return false;
+  if (isBrowserNewTabUrl(targetUrl)) return false;
   if (!forceBlock && isAllowed(sourceUrl)) return false;
   if (!forceBlock && !remotePopupLikely(sourceUrl, targetUrl)) return false;
 
