@@ -8,3 +8,13 @@
 .toggle.compact span:after{width:20px;height:20px;top:4px;left:4px}
 .toggle.compact input:checked + span:after{left:22px}
 @media (max-width:700px){.blacklist-columns{grid-template-columns:1fr}}
+
+.current-site-card{background:linear-gradient(135deg,#15183f,#262056)}
+.current-site-head{padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.14)}
+.site-host{display:block;font-size:16px;color:#fff;word-break:break-word}
+.gap-xs{gap:4px}
+.switch-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.switch-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.08);color:#e7ebff;font-weight:600}
+.pill.ghost{background:rgba(255,255,255,.14);color:#fff}
+.current-site-card .actions-grid{margin-top:14px}
+.current-site-card .subtle{margin-top:12px}
