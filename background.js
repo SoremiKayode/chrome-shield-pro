@@ -42,6 +42,7 @@ const DEFAULT_STATE = {
 };
 
 let state = structuredClone(DEFAULT_STATE);
+const popupCandidates = new Map();
 
 function normalizeHost(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
@@ -101,6 +102,15 @@ function pushRecent(tabId, item) {
 function pushLog(entry) {
   state.logger.unshift({ id: crypto.randomUUID(), ts: Date.now(), ...entry });
   state.logger = state.logger.slice(0, state.maxLogEntries);
+}
+
+function trackPopupCandidate(tabId, sourceTabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return;
+  popupCandidates.set(tabId, { sourceTabId, createdAt: Date.now() });
+}
+
+function dropPopupCandidate(tabId) {
+  popupCandidates.delete(tabId);
 }
 
 function bumpTab(tabId, host, ruleText, item) {
@@ -196,12 +206,15 @@ chrome.webRequest.onErrorOccurred.addListener(async (details) => {
 
 chrome.tabs.onCreated.addListener(async (tab) => {
   if (!state.enabled || !state.popupBlockingEnabled) return;
-  if (tab.openerTabId == null || !tab.pendingUrl) return;
+  if (tab.openerTabId == null) return;
+  trackPopupCandidate(tab.id, tab.openerTabId);
+  if (!tab.pendingUrl) return;
   const opener = await chrome.tabs.get(tab.openerTabId).catch(() => null);
   const openerUrl = opener?.url || '';
   if (isAllowed(openerUrl)) return;
   if (remotePopupLikely(openerUrl, tab.pendingUrl)) {
     await chrome.tabs.remove(tab.id).catch(() => {});
+    dropPopupCandidate(tab.id);
     const host = normalizeHost(tab.pendingUrl);
     const ruleText = inferRule(tab.pendingUrl);
     const item = { host, url: tab.pendingUrl, type: 'popup', action: 'blocked-before-open' };
@@ -214,12 +227,14 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
   if (!state.enabled || !state.popupBlockingEnabled) return;
+  trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
   const sourceUrl = source?.url || '';
   const targetUrl = details.url || '';
   if (isAllowed(sourceUrl)) return;
   if (remotePopupLikely(sourceUrl, targetUrl)) {
     await chrome.tabs.remove(details.tabId).catch(() => {});
+    dropPopupCandidate(details.tabId);
     const host = normalizeHost(targetUrl);
     const ruleText = inferRule(targetUrl);
     const item = { host, url: targetUrl, type: 'popup', action: 'blocked-before-load' };
@@ -232,9 +247,34 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete state.perTab[tabId];
+  dropPopupCandidate(tabId);
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (state.enabled && state.popupBlockingEnabled && (info.url || tab.url) && popupCandidates.has(tabId)) {
+    const candidate = popupCandidates.get(tabId);
+    const sourceTabId = candidate?.sourceTabId ?? tab.openerTabId ?? -1;
+    const source = sourceTabId >= 0 ? await chrome.tabs.get(sourceTabId).catch(() => null) : null;
+    const sourceUrl = source?.url || '';
+    const targetUrl = info.url || tab.url || '';
+    const candidateExpired = !candidate || (Date.now() - candidate.createdAt) > 15000;
+    if (!sourceUrl || isAllowed(sourceUrl) || candidateExpired) {
+      dropPopupCandidate(tabId);
+    } else if (remotePopupLikely(sourceUrl, targetUrl)) {
+      await chrome.tabs.remove(tabId).catch(() => {});
+      dropPopupCandidate(tabId);
+      const host = normalizeHost(targetUrl);
+      const ruleText = inferRule(targetUrl);
+      const item = { host, url: targetUrl, type: 'popup', action: 'blocked-on-redirect' };
+      bumpTab(sourceTabId, host, ruleText, item);
+      state.stats.popupTotal += 1;
+      pushLog({ tabId: sourceTabId, ruleText, ...item });
+      await saveState();
+      return;
+    } else if (baseDomain(normalizeHost(sourceUrl)) === baseDomain(normalizeHost(targetUrl))) {
+      dropPopupCandidate(tabId);
+    }
+  }
   if (info.status === 'loading') {
     const entry = ensureTab(tabId);
     if (entry) entry.pageUrl = tab.url || entry.pageUrl;
