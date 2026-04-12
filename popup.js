@@ -85,10 +85,6 @@ async function render() {
     await chrome.tabs.sendMessage(tab.id, { type: 'startPicker' });
     window.close();
   };
-  document.getElementById('supportBtn').onclick = async () => {
-    await chrome.runtime.sendMessage({ type: 'openSupport' });
-    window.close();
-  };
 }
 
 render();

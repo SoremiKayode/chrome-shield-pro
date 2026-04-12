@@ -37,7 +37,6 @@ const DEFAULT_STATE = {
   perTab: {},
   maxLogEntries: 700,
   lastUpdatedAt: null,
-  supportUrl: 'https://www.paypal.com/ncp/payment/QQ4USSX7KTH6E',
   lastInspectorTabId: null
 };
 
@@ -113,6 +112,21 @@ function dropPopupCandidate(tabId) {
   popupCandidates.delete(tabId);
 }
 
+async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, targetUrl, action) {
+  if (!sourceUrl || isAllowed(sourceUrl) || !targetUrl) return false;
+  if (!remotePopupLikely(sourceUrl, targetUrl)) return false;
+  await chrome.tabs.remove(targetTabId).catch(() => {});
+  dropPopupCandidate(targetTabId);
+  const host = normalizeHost(targetUrl);
+  const ruleText = inferRule(targetUrl);
+  const item = { host, url: targetUrl, type: 'popup', action };
+  bumpTab(sourceTabId, host, ruleText, item);
+  state.stats.popupTotal += 1;
+  pushLog({ tabId: sourceTabId, ruleText, ...item });
+  await saveState();
+  return true;
+}
+
 function bumpTab(tabId, host, ruleText, item) {
   const tab = ensureTab(tabId);
   if (!tab) return;
@@ -171,10 +185,6 @@ async function updateBadge(tabId) {
   await chrome.action.setBadgeText({ text: total ? String(Math.min(total, 999)) : '', tabId });
 }
 
-async function openSupport() {
-  await chrome.tabs.create({ url: state.supportUrl });
-}
-
 chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
   await rebuildRules();
@@ -208,41 +218,29 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   if (!state.enabled || !state.popupBlockingEnabled) return;
   if (tab.openerTabId == null) return;
   trackPopupCandidate(tab.id, tab.openerTabId);
-  if (!tab.pendingUrl) return;
   const opener = await chrome.tabs.get(tab.openerTabId).catch(() => null);
   const openerUrl = opener?.url || '';
   if (isAllowed(openerUrl)) return;
-  if (remotePopupLikely(openerUrl, tab.pendingUrl)) {
-    await chrome.tabs.remove(tab.id).catch(() => {});
-    dropPopupCandidate(tab.id);
-    const host = normalizeHost(tab.pendingUrl);
-    const ruleText = inferRule(tab.pendingUrl);
-    const item = { host, url: tab.pendingUrl, type: 'popup', action: 'blocked-before-open' };
-    bumpTab(tab.openerTabId, host, ruleText, item);
-    state.stats.popupTotal += 1;
-    pushLog({ tabId: tab.openerTabId, ruleText, ...item });
-    await saveState();
-  }
+  if (await maybeBlockPopupTarget(tab.openerTabId, tab.id, openerUrl, tab.pendingUrl || '', 'blocked-before-open')) return;
+  const startedAt = Date.now();
+  const probe = async () => {
+    if (!popupCandidates.has(tab.id)) return;
+    if ((Date.now() - startedAt) > 2500) return;
+    const latest = await chrome.tabs.get(tab.id).catch(() => null);
+    const targetUrl = latest?.url || latest?.pendingUrl || '';
+    const blocked = await maybeBlockPopupTarget(tab.openerTabId, tab.id, openerUrl, targetUrl, 'blocked-fast-follow-up');
+    if (!blocked) setTimeout(probe, 120);
+  };
+  setTimeout(probe, 120);
 });
+
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
   if (!state.enabled || !state.popupBlockingEnabled) return;
   trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
   const sourceUrl = source?.url || '';
-  const targetUrl = details.url || '';
-  if (isAllowed(sourceUrl)) return;
-  if (remotePopupLikely(sourceUrl, targetUrl)) {
-    await chrome.tabs.remove(details.tabId).catch(() => {});
-    dropPopupCandidate(details.tabId);
-    const host = normalizeHost(targetUrl);
-    const ruleText = inferRule(targetUrl);
-    const item = { host, url: targetUrl, type: 'popup', action: 'blocked-before-load' };
-    bumpTab(details.sourceTabId, host, ruleText, item);
-    state.stats.popupTotal += 1;
-    pushLog({ tabId: details.sourceTabId, ruleText, ...item });
-    await saveState();
-  }
+  await maybeBlockPopupTarget(details.sourceTabId, details.tabId, sourceUrl, details.url || '', 'blocked-before-load');
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -257,19 +255,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     const source = sourceTabId >= 0 ? await chrome.tabs.get(sourceTabId).catch(() => null) : null;
     const sourceUrl = source?.url || '';
     const targetUrl = info.url || tab.url || '';
-    const candidateExpired = !candidate || (Date.now() - candidate.createdAt) > 15000;
+    const candidateExpired = !candidate || (Date.now() - candidate.createdAt) > 5000;
     if (!sourceUrl || isAllowed(sourceUrl) || candidateExpired) {
       dropPopupCandidate(tabId);
-    } else if (remotePopupLikely(sourceUrl, targetUrl)) {
-      await chrome.tabs.remove(tabId).catch(() => {});
-      dropPopupCandidate(tabId);
-      const host = normalizeHost(targetUrl);
-      const ruleText = inferRule(targetUrl);
-      const item = { host, url: targetUrl, type: 'popup', action: 'blocked-on-redirect' };
-      bumpTab(sourceTabId, host, ruleText, item);
-      state.stats.popupTotal += 1;
-      pushLog({ tabId: sourceTabId, ruleText, ...item });
-      await saveState();
+    } else if (await maybeBlockPopupTarget(sourceTabId, tabId, sourceUrl, targetUrl, 'blocked-on-redirect')) {
       return;
     } else if (baseDomain(normalizeHost(sourceUrl)) === baseDomain(normalizeHost(targetUrl))) {
       dropPopupCandidate(tabId);
@@ -342,11 +331,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!current.includes(message.selector)) current.push(message.selector);
       state.customCssSelectors[host] = current;
       await saveState();
-      sendResponse({ ok: true });
-      return;
-    }
-    if (message.type === 'openSupport') {
-      await openSupport();
       sendResponse({ ok: true });
       return;
     }

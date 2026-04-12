@@ -24,8 +24,5 @@ document.getElementById('openInspector').addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'openInspector', tabId: tab?.id });
 });
 
-document.getElementById('supportBtn').addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'openSupport' });
-});
 
 load();

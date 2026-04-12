@@ -9,4 +9,4 @@ Load in Chrome:
 Notes:
 - Popup blocking is now stricter for ad-like cross-site popups opened by window.open, target=_blank links, form submit popups, and navigation-target fallbacks.
 - DNR blocks known ad/tracker domains at the network layer.
-- Popup UI now includes Support development, Top blocking rules on this tab, and Recent blocked items.
+- Popup UI now includes Top blocking rules on this tab and Recent blocked items.

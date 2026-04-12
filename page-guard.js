@@ -78,8 +78,8 @@
         } catch {
           clearInterval(timer);
         }
-      }, 25);
-      setTimeout(() => clearInterval(timer), 4000);
+      }, 10);
+      setTimeout(() => clearInterval(timer), 1500);
     } catch {}
     return popupWindow;
   }
