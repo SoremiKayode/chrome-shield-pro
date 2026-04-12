@@ -7,6 +7,9 @@ Load in Chrome:
 4. Select this folder
 
 Notes:
-- Popup blocking is now stricter for ad-like cross-site popups opened by window.open, target=_blank links, form submit popups, and navigation-target fallbacks.
-- DNR blocks known ad/tracker domains at the network layer.
-- Popup UI now includes Top blocking rules on this tab and Recent blocked items.
+- Popup blocking now watches new tabs for both immediate redirects and delayed redirects (up to 12 seconds) and auto-learns suspicious ad redirect domains.
+- DNR blocks an expanded researched set of ad/tracker domains, plus custom domains and auto-discovered redirect ad domains.
+- Options page now includes a blacklist manager with toggle switches for built-in and discovered ad websites.
+- Total ads blocked uses a persistent counter (`adsBlockedTotal`) so counts do not reset between popup openings.
+- Popup UI includes top blocking rules on this tab and recent blocked items.
+- You can toggle a per-site popup lock from the popup UI; new sites default OFF and your enabled sites are saved persistently.

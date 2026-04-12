@@ -29,11 +29,13 @@ async function render() {
   const host = (() => { try { return new URL(tab?.url || '').hostname; } catch { return '-'; } })();
   document.getElementById('enabledToggle').checked = !!state.enabled;
   document.getElementById('statusText').textContent = state.enabled ? 'Enabled' : 'Disabled';
-  document.getElementById('totalBlocked').textContent = String(state.stats.blockedTotal || 0);
+  document.getElementById('totalBlocked').textContent = String(state.stats.adsBlockedTotal || state.stats.blockedTotal || 0);
   document.getElementById('popupBlocked').textContent = String(state.stats.popupTotal || 0);
   document.getElementById('siteHost').textContent = host;
   document.getElementById('updatedAt').textContent = `Last rules update: ${fmtDate(state.lastUpdatedAt)}`;
   document.getElementById('allowlistBtn').textContent = state.allowlist.includes(host) ? 'Remove allowlist' : 'Allowlist site';
+  const popupSiteOn = (state.popupBlockSites || []).includes(host);
+  document.getElementById('popupSiteBtn').textContent = popupSiteOn ? 'Popups blocked on site (On)' : 'Block popups on site (Off)';
 
   const domainList = document.getElementById('domainList');
   const domainEntries = Object.entries(response.hostCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -73,6 +75,10 @@ async function render() {
   };
   document.getElementById('allowlistBtn').onclick = async () => {
     await chrome.runtime.sendMessage({ type: 'toggleAllowlist', host });
+    render();
+  };
+  document.getElementById('popupSiteBtn').onclick = async () => {
+    await chrome.runtime.sendMessage({ type: 'togglePopupBlockSite', host });
     render();
   };
   document.getElementById('openOptions').onclick = () => chrome.runtime.openOptionsPage();

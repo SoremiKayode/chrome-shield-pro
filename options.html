@@ -14,6 +14,20 @@
       <label class="check"><input id="cosmeticBlockingEnabled" type="checkbox"> Enable cosmetic cleanup</label>
     </section>
     <section class="card light">
+      <h2>Ad websites blacklist manager</h2>
+      <p class="subtle">Use switches to keep or remove domains from the blacklist. Turning off a discovered domain removes it from the list immediately.</p>
+      <div class="blacklist-columns">
+        <div>
+          <h3>Built-in researched ad domains</h3>
+          <div id="builtinDomainList" class="list compact"></div>
+        </div>
+        <div>
+          <h3>Auto-discovered redirect ad domains</h3>
+          <div id="discoveredDomainList" class="list compact"></div>
+        </div>
+      </div>
+    </section>
+    <section class="card light">
       <h2>Custom blocked domains</h2>
       <textarea id="customBlockDomains" rows="8" placeholder="one domain per line"></textarea>
     </section>
