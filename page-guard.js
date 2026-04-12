@@ -25,7 +25,18 @@
     }
   };
 
+  const isBrowserNewTab = (target) => {
+    try {
+      const absolute = new URL(target, location.href).href.toLowerCase();
+      return absolute === 'chrome://newtab/' || absolute === 'chrome://newtab' || absolute === 'about:newtab';
+    } catch {
+      const value = String(target || '').toLowerCase();
+      return value === 'chrome://newtab/' || value === 'chrome://newtab' || value === 'about:newtab';
+    }
+  };
+
   const shouldBlock = (target) => {
+    if (isBrowserNewTab(target)) return false;
     try {
       const absolute = new URL(target, location.href).href;
       if (sameBase(location.href, absolute)) return false;
