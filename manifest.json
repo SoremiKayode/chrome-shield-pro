@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Chrome Shield Pro",
   "version": "2.0.0",
-  "description": "Chrome ad blocker with stronger popup prevention, request inspector, top rules, recent blocked items, and support section.",
+  "description": "Chrome ad blocker with stronger popup prevention, request inspector, top rules, and recent blocked items.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
