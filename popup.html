@@ -23,23 +23,32 @@
       </div>
     </section>
 
-    <section class="card light">
-      <div class="row between stretch-on-mobile">
-        <div>
+    <section class="card dark current-site-card">
+      <div class="row between stretch-on-mobile current-site-head">
+        <div class="stack gap-xs min0">
           <div class="label">Current website</div>
-          <strong id="siteHost">-</strong>
+          <strong id="siteHost" class="site-host">-</strong>
         </div>
-        <div class="stack gap-sm">
-          <button id="allowlistBtn" class="pill secondary">Allowlist site</button>
-          <button id="popupSiteBtn" class="pill secondary">Block popups on site</button>
+        <label class="toggle compact"><input id="siteHostToggle" type="checkbox"><span></span></label>
+      </div>
+
+      <div class="switch-list">
+        <div class="switch-item">
+          <span>Allowlist site</span>
+          <label class="toggle compact"><input id="allowlistToggle" type="checkbox"><span></span></label>
+        </div>
+        <div class="switch-item">
+          <span>Block popup on site</span>
+          <label class="toggle compact"><input id="popupSiteToggle" type="checkbox"><span></span></label>
         </div>
       </div>
+
       <div class="actions-grid three">
         <button id="pickElement" class="pill primary">Pick element</button>
-        <button id="openInspector" class="pill secondary">Request inspector</button>
-        <button id="openOptions" class="pill secondary">Settings</button>
+        <button id="openInspector" class="pill ghost">Request inspector</button>
+        <button id="openOptions" class="pill ghost">Settings</button>
       </div>
-      <div class="subtle" id="updatedAt">Last rules update: -</div>
+      <div class="subtle subtle-light" id="updatedAt">Last rules update: -</div>
     </section>
 
     <section class="card light">

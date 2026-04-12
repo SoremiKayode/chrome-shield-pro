@@ -21,21 +21,35 @@ function renderCountList(container, entries, emptyText, formatter) {
   entries.forEach(formatter);
 }
 
+async function getShowSiteHost() {
+  const stored = await chrome.storage.local.get('showSiteHost');
+  return stored.showSiteHost !== false;
+}
+
+async function setShowSiteHost(showSiteHost) {
+  await chrome.storage.local.set({ showSiteHost });
+}
+
 async function render() {
   const [tabQuery] = await chrome.tabs.query({ active: true, currentWindow: true });
   const response = await getState(tabQuery?.id);
   const state = response.state;
   const tab = response.activeTab;
   const host = (() => { try { return new URL(tab?.url || '').hostname; } catch { return '-'; } })();
+  const showSiteHost = await getShowSiteHost();
+
   document.getElementById('enabledToggle').checked = !!state.enabled;
   document.getElementById('statusText').textContent = state.enabled ? 'Enabled' : 'Disabled';
   document.getElementById('totalBlocked').textContent = String(state.stats.adsBlockedTotal || state.stats.blockedTotal || 0);
   document.getElementById('popupBlocked').textContent = String(state.stats.popupTotal || 0);
-  document.getElementById('siteHost').textContent = host;
+  document.getElementById('siteHost').textContent = showSiteHost ? host : 'Hidden';
   document.getElementById('updatedAt').textContent = `Last rules update: ${fmtDate(state.lastUpdatedAt)}`;
-  document.getElementById('allowlistBtn').textContent = state.allowlist.includes(host) ? 'Remove allowlist' : 'Allowlist site';
+
+  const allowlisted = state.allowlist.includes(host);
   const popupSiteOn = (state.popupBlockSites || []).includes(host);
-  document.getElementById('popupSiteBtn').textContent = popupSiteOn ? 'Popups blocked on site (On)' : 'Block popups on site (Off)';
+  document.getElementById('allowlistToggle').checked = allowlisted;
+  document.getElementById('popupSiteToggle').checked = popupSiteOn;
+  document.getElementById('siteHostToggle').checked = showSiteHost;
 
   const domainList = document.getElementById('domainList');
   const domainEntries = Object.entries(response.hostCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -73,12 +87,16 @@ async function render() {
     await chrome.runtime.sendMessage({ type: 'toggleEnabled' });
     render();
   };
-  document.getElementById('allowlistBtn').onclick = async () => {
+  document.getElementById('allowlistToggle').onchange = async () => {
     await chrome.runtime.sendMessage({ type: 'toggleAllowlist', host });
     render();
   };
-  document.getElementById('popupSiteBtn').onclick = async () => {
+  document.getElementById('popupSiteToggle').onchange = async () => {
     await chrome.runtime.sendMessage({ type: 'togglePopupBlockSite', host });
+    render();
+  };
+  document.getElementById('siteHostToggle').onchange = async (event) => {
+    await setShowSiteHost(event.target.checked);
     render();
   };
   document.getElementById('openOptions').onclick = () => chrome.runtime.openOptionsPage();
