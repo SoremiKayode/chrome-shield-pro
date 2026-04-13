@@ -26,7 +26,7 @@ const PREMIUM_PRICE_USD = 3;
 const FREE_LIMITS = { ads: 200, popups: 100 };
 
 const REDIRECT_OBSERVE_MS = 12000;
-const REDIRECT_POLL_MS = 250;
+const REDIRECT_POLL_MS = 25;
 
 const DEFAULT_STATE = {
   enabled: true,
@@ -101,6 +101,21 @@ function normalizeHost(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
 }
 
+function canonicalHost(input) {
+  const host = normalizeHost(input) || String(input || '').trim().toLowerCase();
+  if (!host) return '';
+  return baseDomain(host) || host;
+}
+
+function hostMatchesList(host, entries = []) {
+  const target = canonicalHost(host);
+  if (!target) return false;
+  return normalizeDomainList(entries).some((entry) => {
+    const normalizedEntry = canonicalHost(entry);
+    return !!normalizedEntry && (target === normalizedEntry || target.endsWith('.' + normalizedEntry));
+  });
+}
+
 function baseDomain(host) {
   const parts = String(host || '').split('.').filter(Boolean);
   return parts.length <= 2 ? parts.join('.') : parts.slice(-2).join('.');
@@ -120,13 +135,12 @@ function allBlockedDomains() {
 }
 
 function isAllowed(pageUrl) {
-  const host = normalizeHost(pageUrl);
-  return state.allowlist.some(entry => host === entry || host.endsWith('.' + entry));
+  return hostMatchesList(pageUrl, state.allowlist);
 }
 
 function shouldForcePopupBlock(pageUrl) {
-  const host = normalizeHost(pageUrl);
-  return state.popupBlockSites.some(entry => host === entry || host.endsWith('.' + entry));
+  if (isAllowed(pageUrl)) return false;
+  return hostMatchesList(pageUrl, state.popupBlockSites);
 }
 
 function adLikeHost(host) {
@@ -309,8 +323,8 @@ async function loadState() {
   state.customBlockDomains = normalizeDomainList(state.customBlockDomains);
   state.discoveredAdDomains = normalizeDomainList(state.discoveredAdDomains);
   state.disabledBuiltinDomains = normalizeDomainList(state.disabledBuiltinDomains);
-  state.allowlist = normalizeDomainList(state.allowlist);
-  state.popupBlockSites = normalizeDomainList(state.popupBlockSites);
+  state.allowlist = normalizeDomainList(state.allowlist).map(canonicalHost).filter(Boolean);
+  state.popupBlockSites = normalizeDomainList(state.popupBlockSites).map(canonicalHost).filter(Boolean);
   if (!state.stats || typeof state.stats !== 'object') state.stats = { ...DEFAULT_STATE.stats };
   if (!Number.isFinite(state.stats.adsBlockedTotal)) state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
   state.auth = {
@@ -560,7 +574,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message.type === 'toggleAllowlist') {
-      const host = String(message.host || '').toLowerCase();
+      const host = canonicalHost(message.host || '');
       if (!host) return sendResponse({ ok: false });
       if (state.allowlist.includes(host)) state.allowlist = state.allowlist.filter(h => h !== host);
       else state.allowlist.push(host);
@@ -569,7 +583,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message.type === 'togglePopupBlockSite') {
-      const host = String(message.host || '').toLowerCase();
+      const host = canonicalHost(message.host || '');
       if (!host) return sendResponse({ ok: false });
       if (state.popupBlockSites.includes(host)) state.popupBlockSites = state.popupBlockSites.filter(h => h !== host);
       else state.popupBlockSites.push(host);
@@ -604,8 +618,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'saveOptions') {
       const payload = { ...message.payload };
       payload.customBlockDomains = normalizeDomainList(payload.customBlockDomains);
-      payload.allowlist = normalizeDomainList(payload.allowlist);
-      if (payload.popupBlockSites) payload.popupBlockSites = normalizeDomainList(payload.popupBlockSites);
+      payload.allowlist = normalizeDomainList(payload.allowlist).map(canonicalHost).filter(Boolean);
+      if (payload.popupBlockSites) payload.popupBlockSites = normalizeDomainList(payload.popupBlockSites).map(canonicalHost).filter(Boolean);
       state = { ...state, ...payload };
       await saveState();
       await rebuildRules();

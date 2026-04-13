@@ -7,6 +7,30 @@ function fmtDate(v) {
   try { return new Date(v).toLocaleString(); } catch { return v; }
 }
 
+function baseDomain(host) {
+  const parts = String(host || '').toLowerCase().split('.').filter(Boolean);
+  return parts.length <= 2 ? parts.join('.') : parts.slice(-2).join('.');
+}
+
+function canonicalHost(hostOrUrl) {
+  try {
+    const parsed = new URL(hostOrUrl);
+    return baseDomain(parsed.hostname) || parsed.hostname.toLowerCase();
+  } catch {
+    const host = String(hostOrUrl || '').trim().toLowerCase();
+    return baseDomain(host) || host;
+  }
+}
+
+function hostMatches(host, entries = []) {
+  const target = canonicalHost(host);
+  if (!target) return false;
+  return (entries || []).some((entry) => {
+    const normalized = canonicalHost(entry);
+    return normalized && (target === normalized || target.endsWith('.' + normalized));
+  });
+}
+
 async function getShowSiteHost() {
   const stored = await chrome.storage.local.get('showSiteHost');
   return stored.showSiteHost !== false;
@@ -41,10 +65,11 @@ async function render() {
   document.getElementById('loginState').textContent = auth.user?.email ? 'Logged in' : 'Logged out';
   document.getElementById('paidState').textContent = auth.hasAccess ? 'Paid' : 'Unpaid';
 
-  const allowlisted = state.allowlist.includes(host);
-  const popupSiteOn = (state.popupBlockSites || []).includes(host);
+  const allowlisted = hostMatches(host, state.allowlist || []);
+  const popupSiteOn = hostMatches(host, state.popupBlockSites || []);
   document.getElementById('allowlistToggle').checked = allowlisted;
   document.getElementById('popupSiteToggle').checked = popupSiteOn;
+  document.getElementById('popupSiteToggle').disabled = allowlisted;
   document.getElementById('siteHostToggle').checked = showSiteHost;
 
   document.getElementById('enabledToggle').onchange = async () => {

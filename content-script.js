@@ -53,11 +53,24 @@
     chrome.runtime.sendMessage({ type: 'popupBlocked', url: ev.detail?.url || '' });
   });
 
+  function baseDomain(host) {
+    const parts = String(host || '').toLowerCase().split('.').filter(Boolean);
+    return parts.length <= 2 ? parts.join('.') : parts.slice(-2).join('.');
+  }
+
+  function matchesHostList(host, entries = []) {
+    const target = baseDomain(host) || String(host || '').toLowerCase();
+    return (entries || []).some((entry) => {
+      const normalized = baseDomain(entry) || String(entry || '').toLowerCase();
+      return normalized && (target === normalized || target.endsWith('.' + normalized));
+    });
+  }
+
   chrome.runtime.sendMessage({ type: 'getState' }, (response) => {
     const state = response?.state;
     if (!state?.enabled || !state.cosmeticBlockingEnabled || response?.isBlockingPausedByLimit) return;
     const host = location.hostname.toLowerCase();
-    if (state.allowlist?.includes(host)) return;
+    if (matchesHostList(host, state.allowlist || [])) return;
     const custom = state.customCssSelectors?.[host] || [];
     injectCss([...(response.builtinCosmetic || []), ...custom]);
     if (document.readyState === 'loading') {
