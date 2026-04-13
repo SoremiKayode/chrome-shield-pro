@@ -1,17 +1,10 @@
 const BUILTIN_BLOCKED_DOMAINS = [
-  // Google / YouTube ad stack
   'doubleclick.net','googlesyndication.com','googleadservices.com','adservice.google.com','ads.youtube.com','googletagservices.com','pagead2.googlesyndication.com',
-  // Major exchanges / DSP / SSP
   'adnxs.com','taboola.com','outbrain.com','criteo.com','rubiconproject.com','pubmatic.com','openx.net','adsrvr.org','casalemedia.com','smartadserver.com','zedo.com','moatads.com','lijit.com','33across.com','media.net','yieldmo.com','triplelift.com','sharethrough.com','teads.tv','onetag.com','imrworldwide.com','serving-sys.com','contextweb.com','sovrn.com','gumgum.com','undertone.com','rhythmone.com','trafficjunky.net','spotxchange.com',
-  // Tracking / measurement / retargeting
   'scorecardresearch.com','quantserve.com','amazon-adsystem.com','everesttech.net','turn.com','tapad.com','mathtag.com','demdex.net','bluekai.com','exelator.com','sitescout.com','simpli.fi','crwdcntrl.net','adform.net','addthis.com','addtoany.com','rlcdn.com','bidswitch.net',
-  // Affiliate / pop / push ad networks commonly seen in malicious redirects
-  'propellerads.com','propeller-tracking.com','popads.net','popcash.net','adcash.com','hilltopads.net','exoclick.com','juicyads.com','trafficstars.com','mgid.com','revcontent.com','adsterra.com','clickadu.com','adcashnetwork.com','hilltopads.net',
-  // Misc frequently blocked ad/tracker hosts
+  'propellerads.com','propeller-tracking.com','popads.net','popcash.net','adcash.com','hilltopads.net','exoclick.com','juicyads.com','trafficstars.com','mgid.com','revcontent.com','adsterra.com','clickadu.com','adcashnetwork.com',
   'googletagmanager.com','google-analytics.com','facebook.net','connect.facebook.net','branch.io','braze.com','appsflyer.com','kochava.com','adjust.com','hotjar.com','segment.com','mixpanel.com','optimizely.com',
-  // Additional ad infra domains
   'adcolony.com','applovin.com','unityads.unity3d.com','ironsrc.com','vungle.com','inmobi.com','chartboost.com','smaato.net','mobfox.com','inner-active.mobi','leadbolt.net','admob.com',
-  // Common ad-serving CDNs / redirects
   'adroll.com','adriver.ru','adsafeprotected.com','adition.com','adscale.de','adtech.de','adtechus.com','admanmedia.com','adkernel.com','adnuntius.com','adgebra.co','adgrx.com','adview.cn',
   'bidr.io','rtbhouse.com','rtmark.net','smadex.com','xandr.com','loopme.com','imonomy.com','revx.io','performax.cz','w55c.net','mookie1.com','fwmrm.net','atdmt.com','2mdn.net'
 ];
@@ -25,6 +18,12 @@ const BUILTIN_COSMETIC = [
   'iframe[src*="doubleclick.net"]','iframe[src*="googlesyndication.com"]',
   '.cookie-banner-ad','.newsletter-popup','.sticky-ad','.ad-slot','.banner-ad'
 ];
+
+const API_BASE_URL = 'https://api.yourdomain.com/api';
+const PRODUCT_ID = 'prod_adblocker_001';
+const SOCIAL_LOGIN_URL = 'https://yourdomain.com/social-login';
+const PREMIUM_PRICE_USD = 3;
+const FREE_LIMITS = { ads: 200, popups: 100 };
 
 const REDIRECT_OBSERVE_MS = 12000;
 const REDIRECT_POLL_MS = 250;
@@ -40,6 +39,22 @@ const DEFAULT_STATE = {
   discoveredAdDomains: [],
   popupBlockSites: [],
   stats: { blockedTotal: 0, popupTotal: 0, adsBlockedTotal: 0 },
+  usage: {
+    monthKey: '',
+    adsBlocked: 0,
+    popupsBlocked: 0,
+    limitExceeded: false,
+    notifiedAt: null
+  },
+  auth: {
+    token: '',
+    user: null,
+    productId: PRODUCT_ID,
+    hasAccess: false,
+    paymentStatus: 'unpaid',
+    lastSyncTime: null
+  },
+  product: null,
   logger: [],
   perTab: {},
   maxLogEntries: 700,
@@ -49,6 +64,38 @@ const DEFAULT_STATE = {
 
 let state = structuredClone(DEFAULT_STATE);
 const popupCandidates = new Map();
+
+function nowMonthKey() {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function hasPremiumAccess() {
+  return !!(state.auth?.hasAccess || state.auth?.paymentStatus === 'paid');
+}
+
+function ensureUsageFresh() {
+  state.usage = state.usage || structuredClone(DEFAULT_STATE.usage);
+  const monthKey = nowMonthKey();
+  if (state.usage.monthKey !== monthKey) {
+    state.usage = {
+      monthKey,
+      adsBlocked: 0,
+      popupsBlocked: 0,
+      limitExceeded: false,
+      notifiedAt: null
+    };
+  }
+}
+
+function isBlockingPausedByLimit() {
+  ensureUsageFresh();
+  return !!state.usage.limitExceeded && !hasPremiumAccess();
+}
+
+function isBlockingActive() {
+  return !!state.enabled && !isBlockingPausedByLimit();
+}
 
 function normalizeHost(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ''; }
@@ -76,7 +123,6 @@ function isAllowed(pageUrl) {
   const host = normalizeHost(pageUrl);
   return state.allowlist.some(entry => host === entry || host.endsWith('.' + entry));
 }
-
 
 function shouldForcePopupBlock(pageUrl) {
   const host = normalizeHost(pageUrl);
@@ -155,7 +201,72 @@ function learnAdDomain(url) {
   return true;
 }
 
+function incrementUsage(kind) {
+  ensureUsageFresh();
+  if (kind === 'popup') state.usage.popupsBlocked += 1;
+  else state.usage.adsBlocked += 1;
+
+  const exceeded = state.usage.adsBlocked >= FREE_LIMITS.ads || state.usage.popupsBlocked >= FREE_LIMITS.popups;
+  if (exceeded && !hasPremiumAccess()) {
+    state.usage.limitExceeded = true;
+    state.usage.notifiedAt = new Date().toISOString();
+  }
+}
+
+async function setAuthStorage(auth) {
+  await chrome.storage.local.set({
+    token: auth.token || '',
+    user: auth.user || null,
+    productId: auth.productId || PRODUCT_ID,
+    hasAccess: !!auth.hasAccess,
+    paymentStatus: auth.paymentStatus || 'unpaid',
+    lastSyncTime: auth.lastSyncTime || null
+  });
+}
+
+async function apiFetch(path, options = {}) {
+  const token = state.auth?.token;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
+  return data;
+}
+
+async function refreshProductMetadata() {
+  try {
+    const data = await apiFetch(`/products/${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' });
+    state.product = data.product || data;
+  } catch {
+    const fallback = await apiFetch(`/products/plugin-metadata?productId=${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' });
+    state.product = fallback.product || fallback;
+  }
+  state.auth.productId = PRODUCT_ID;
+  await saveState();
+  await setAuthStorage(state.auth);
+  return state.product;
+}
+
+async function checkAccess() {
+  if (!state.auth?.user?.id) return { hasAccess: false };
+  const query = `?userId=${encodeURIComponent(state.auth.user.id)}&productId=${encodeURIComponent(PRODUCT_ID)}`;
+  const data = await apiFetch(`/payments/check-access${query}`, { method: 'GET' });
+  state.auth.hasAccess = !!data.hasAccess;
+  state.auth.paymentStatus = data.hasAccess ? 'paid' : 'unpaid';
+  state.auth.lastSyncTime = new Date().toISOString();
+  if (state.auth.hasAccess) state.usage.limitExceeded = false;
+  await saveState();
+  await setAuthStorage(state.auth);
+  await rebuildRules();
+  return data;
+}
+
 async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, targetUrl, action, forceBlock = false) {
+  if (!isBlockingActive()) return false;
   if (!sourceUrl || !targetUrl) return false;
   if (isBrowserNewTabUrl(targetUrl)) return false;
   if (!forceBlock && isAllowed(sourceUrl)) return false;
@@ -168,7 +279,7 @@ async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, target
   const host = normalizeHost(targetUrl);
   const ruleText = inferRule(targetUrl);
   const item = { host, url: targetUrl, type: 'popup', action };
-  bumpTab(sourceTabId, host, ruleText, item);
+  bumpTab(sourceTabId, host, ruleText, item, 'popup');
   state.stats.popupTotal += 1;
   pushLog({ tabId: sourceTabId, ruleText, ...item });
 
@@ -177,7 +288,7 @@ async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, target
   return true;
 }
 
-function bumpTab(tabId, host, ruleText, item) {
+function bumpTab(tabId, host, ruleText, item, usageKind = 'ad') {
   const tab = ensureTab(tabId);
   if (tab) {
     tab.total += 1;
@@ -186,12 +297,14 @@ function bumpTab(tabId, host, ruleText, item) {
     if (item) pushRecent(tabId, item);
   }
   state.stats.blockedTotal += 1;
-  state.stats.adsBlockedTotal = (state.stats.adsBlockedTotal || 0) + 1;
+  state.stats.adsBlockedTotal = (state.stats.adsBlockedTotal || 0) + (usageKind === 'popup' ? 0 : 1);
+  incrementUsage(usageKind);
   updateBadge(tabId).catch(() => {});
 }
 
 async function loadState() {
   const stored = await chrome.storage.local.get('state');
+  const authStored = await chrome.storage.local.get(['token', 'user', 'productId', 'hasAccess', 'paymentStatus', 'lastSyncTime']);
   state = { ...structuredClone(DEFAULT_STATE), ...(stored.state || {}) };
   state.customBlockDomains = normalizeDomainList(state.customBlockDomains);
   state.discoveredAdDomains = normalizeDomainList(state.discoveredAdDomains);
@@ -199,9 +312,18 @@ async function loadState() {
   state.allowlist = normalizeDomainList(state.allowlist);
   state.popupBlockSites = normalizeDomainList(state.popupBlockSites);
   if (!state.stats || typeof state.stats !== 'object') state.stats = { ...DEFAULT_STATE.stats };
-  if (!Number.isFinite(state.stats.adsBlockedTotal)) {
-    state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
-  }
+  if (!Number.isFinite(state.stats.adsBlockedTotal)) state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
+  state.auth = {
+    ...structuredClone(DEFAULT_STATE.auth),
+    ...(state.auth || {}),
+    token: authStored.token || state.auth?.token || '',
+    user: authStored.user || state.auth?.user || null,
+    productId: authStored.productId || state.auth?.productId || PRODUCT_ID,
+    hasAccess: authStored.hasAccess ?? state.auth?.hasAccess ?? false,
+    paymentStatus: authStored.paymentStatus || state.auth?.paymentStatus || 'unpaid',
+    lastSyncTime: authStored.lastSyncTime || state.auth?.lastSyncTime || null
+  };
+  ensureUsageFresh();
 }
 
 async function saveState() {
@@ -229,8 +351,10 @@ const rulesFromPatterns = (patterns, startId = 50000, priority = 1) => patterns.
 }));
 
 async function rebuildRules() {
-  const allDomains = allBlockedDomains();
-  const newRules = [...rulesFromDomains(allDomains), ...rulesFromPatterns(BUILTIN_URL_PATTERNS)];
+  ensureUsageFresh();
+  const active = isBlockingActive();
+  const allDomains = active ? allBlockedDomains() : [];
+  const newRules = active ? [...rulesFromDomains(allDomains), ...rulesFromPatterns(BUILTIN_URL_PATTERNS)] : [];
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map(r => r.id),
@@ -243,7 +367,11 @@ async function rebuildRules() {
 async function updateBadge(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return;
   const total = state.perTab[tabId]?.total || 0;
-  await chrome.action.setBadgeBackgroundColor({ color: '#5b5cf0', tabId });
+  await chrome.action.setBadgeBackgroundColor({ color: isBlockingPausedByLimit() ? '#ff4f4f' : '#5b5cf0', tabId });
+  if (isBlockingPausedByLimit()) {
+    await chrome.action.setBadgeText({ text: '!', tabId });
+    return;
+  }
   await chrome.action.setBadgeText({ text: total ? String(Math.min(total, 999)) : '', tabId });
 }
 
@@ -287,20 +415,26 @@ async function checkCandidateRedirect(tabId, targetUrl) {
 
   const sourceBase = baseDomain(normalizeHost(sourceUrl));
   const targetBase = baseDomain(normalizeHost(targetUrl));
-  if (!forceBlock && sourceBase && targetBase && sourceBase === targetBase && candidate.seenUrls.size <= 1) {
-    dropPopupCandidate(tabId);
-  }
+  if (!forceBlock && sourceBase && targetBase && sourceBase === targetBase && candidate.seenUrls.size <= 1) dropPopupCandidate(tabId);
+}
+
+async function syncAccessIfPossible() {
+  if (!state.auth?.token || !state.auth?.user?.id) return;
+  try { await checkAccess(); } catch {}
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
   await rebuildRules();
   chrome.alarms.create('refreshRules', { periodInMinutes: 60 });
+  chrome.alarms.create('syncAccess', { periodInMinutes: 180 });
+  try { await refreshProductMetadata(); } catch {}
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await loadState();
   await rebuildRules();
+  await syncAccessIfPossible();
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -308,21 +442,26 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     await loadState();
     await rebuildRules();
   }
+  if (alarm.name === 'syncAccess') {
+    await loadState();
+    await syncAccessIfPossible();
+  }
 });
 
 chrome.webRequest.onErrorOccurred.addListener(async (details) => {
-  if (!state.enabled) return;
+  if (!isBlockingActive()) return;
   if (!details.error || !details.error.includes('ERR_BLOCKED_BY_CLIENT')) return;
   const host = normalizeHost(details.url);
   const ruleText = inferRule(details.url);
   const item = { host, url: details.url, type: details.type || 'request', action: 'blocked' };
-  bumpTab(details.tabId, host, ruleText, item);
+  bumpTab(details.tabId, host, ruleText, item, 'ad');
   pushLog({ tabId: details.tabId, ruleText, ...item });
   await saveState();
+  if (isBlockingPausedByLimit()) await rebuildRules();
 }, { urls: ['<all_urls>'] });
 
 chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!state.enabled || !state.popupBlockingEnabled) return;
+  if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   if (tab.openerTabId == null) return;
 
   trackPopupCandidate(tab.id, tab.openerTabId);
@@ -350,7 +489,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 });
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
-  if (!state.enabled || !state.popupBlockingEnabled) return;
+  if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
   const sourceUrl = source?.url || '';
@@ -364,7 +503,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
-  if (state.enabled && state.popupBlockingEnabled && (info.url || tab.url) && popupCandidates.has(tabId)) {
+  if (isBlockingActive() && state.popupBlockingEnabled && (info.url || tab.url) && popupCandidates.has(tabId)) {
     await checkCandidateRedirect(tabId, info.url || tab.url || '');
   }
   if (info.status === 'loading') {
@@ -377,6 +516,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message.type === 'getState') {
+      ensureUsageFresh();
       const requestedTabId = Number.isInteger(message.tabId) ? message.tabId : null;
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = requestedTabId ?? state.lastInspectorTabId ?? (tab?.id ?? -1);
@@ -391,13 +531,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         recentItems: entry.recent || [],
         builtinCosmetic: BUILTIN_COSMETIC,
         builtinAdDomains: BUILTIN_BLOCKED_DOMAINS,
-        enabledBuiltinAdDomains: effectiveBuiltinDomains()
+        enabledBuiltinAdDomains: effectiveBuiltinDomains(),
+        freeLimits: FREE_LIMITS,
+        isBlockingPausedByLimit: isBlockingPausedByLimit(),
+        premiumPriceUsd: PREMIUM_PRICE_USD
+      });
+      return;
+    }
+    if (message.type === 'getAccountState') {
+      ensureUsageFresh();
+      sendResponse({
+        ok: true,
+        auth: state.auth,
+        product: state.product,
+        freeLimits: FREE_LIMITS,
+        usage: state.usage,
+        isBlockingPausedByLimit: isBlockingPausedByLimit(),
+        premiumPriceUsd: PREMIUM_PRICE_USD,
+        apiBaseUrl: API_BASE_URL
       });
       return;
     }
     if (message.type === 'toggleEnabled') {
       state.enabled = !state.enabled;
       await saveState();
+      await rebuildRules();
       sendResponse({ ok: true, enabled: state.enabled });
       return;
     }
@@ -455,14 +613,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     if (message.type === 'popupBlocked') {
+      if (!isBlockingActive()) return sendResponse({ ok: true, skipped: true });
       state.stats.popupTotal += 1;
       const host = normalizeHost(message.url || '');
       const ruleText = inferRule(message.url || '');
       const tabId = sender.tab?.id ?? -1;
       const item = { host, url: message.url || '', type: 'popup', action: 'blocked-in-page' };
-      bumpTab(tabId, host, ruleText, item);
+      bumpTab(tabId, host, ruleText, item, 'popup');
       pushLog({ tabId, ruleText, ...item });
       await saveState();
+      if (isBlockingPausedByLimit()) await rebuildRules();
       sendResponse({ ok: true });
       return;
     }
@@ -483,7 +643,94 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
       return;
     }
+
+    if (message.type === 'signup') {
+      const data = await apiFetch('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ name: message.name, email: message.email, password: message.password })
+      });
+      sendResponse({ ok: true, data });
+      return;
+    }
+    if (message.type === 'login') {
+      const data = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: message.email, password: message.password, productId: PRODUCT_ID })
+      });
+      if (data?.success) {
+        state.auth.token = data.token || '';
+        state.auth.user = data.user || null;
+        state.auth.productId = PRODUCT_ID;
+        state.auth.lastSyncTime = new Date().toISOString();
+        await setAuthStorage(state.auth);
+        await saveState();
+      }
+      sendResponse({ ok: true, data });
+      return;
+    }
+    if (message.type === 'startSocialLogin') {
+      const callbackUrl = encodeURIComponent(chrome.runtime.getURL('options.html'));
+      const url = `${SOCIAL_LOGIN_URL}?productId=${encodeURIComponent(PRODUCT_ID)}&redirect=${callbackUrl}`;
+      await chrome.tabs.create({ url });
+      sendResponse({ ok: true, url });
+      return;
+    }
+    if (message.type === 'setSocialToken') {
+      state.auth.token = String(message.token || '');
+      state.auth.user = message.user || state.auth.user || null;
+      state.auth.lastSyncTime = new Date().toISOString();
+      await saveState();
+      await setAuthStorage(state.auth);
+      sendResponse({ ok: true });
+      return;
+    }
+    if (message.type === 'checkAccess') {
+      const data = await checkAccess();
+      sendResponse({ ok: true, data });
+      return;
+    }
+    if (message.type === 'refreshProductMetadata') {
+      const product = await refreshProductMetadata();
+      sendResponse({ ok: true, product });
+      return;
+    }
+    if (message.type === 'startPaypalPayment') {
+      if (!state.auth?.user?.id) throw new Error('Please log in first.');
+      const data = await apiFetch('/payments/paypal/create-order', {
+        method: 'POST',
+        body: JSON.stringify({ userId: state.auth.user.id, productId: PRODUCT_ID })
+      });
+      if (data.approvalUrl) await chrome.tabs.create({ url: data.approvalUrl });
+      sendResponse({ ok: true, data });
+      return;
+    }
+    if (message.type === 'capturePaypalOrder') {
+      if (!state.auth?.user?.id) throw new Error('Please log in first.');
+      const data = await apiFetch('/payments/paypal/capture-order', {
+        method: 'POST',
+        body: JSON.stringify({ userId: state.auth.user.id, productId: PRODUCT_ID, orderId: message.orderId })
+      });
+      if (data.success) {
+        state.auth.hasAccess = true;
+        state.auth.paymentStatus = 'paid';
+        state.usage.limitExceeded = false;
+        state.auth.lastSyncTime = new Date().toISOString();
+        await setAuthStorage(state.auth);
+        await saveState();
+        await rebuildRules();
+      }
+      sendResponse({ ok: true, data });
+      return;
+    }
+    if (message.type === 'logout') {
+      state.auth = structuredClone(DEFAULT_STATE.auth);
+      await setAuthStorage(state.auth);
+      await saveState();
+      sendResponse({ ok: true });
+      return;
+    }
+
     sendResponse({ ok: false, error: 'Unknown message' });
-  })();
+  })().catch((error) => sendResponse({ ok: false, error: error.message || 'Request failed' }));
   return true;
 });

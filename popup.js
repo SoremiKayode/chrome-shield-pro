@@ -7,20 +7,6 @@ function fmtDate(v) {
   try { return new Date(v).toLocaleString(); } catch { return v; }
 }
 
-function shortenUrl(url, limit = 62) {
-  const text = String(url || '');
-  return text.length > limit ? text.slice(0, limit - 1) + '…' : text;
-}
-
-function renderCountList(container, entries, emptyText, formatter) {
-  container.innerHTML = '';
-  if (!entries.length) {
-    container.innerHTML = `<div class="empty">${emptyText}</div>`;
-    return;
-  }
-  entries.forEach(formatter);
-}
-
 async function getShowSiteHost() {
   const stored = await chrome.storage.local.get('showSiteHost');
   return stored.showSiteHost !== false;
@@ -33,55 +19,33 @@ async function setShowSiteHost(showSiteHost) {
 async function render() {
   const [tabQuery] = await chrome.tabs.query({ active: true, currentWindow: true });
   const response = await getState(tabQuery?.id);
-  const state = response.state;
-  const tab = response.activeTab;
-  const host = (() => { try { return new URL(tab?.url || '').hostname; } catch { return '-'; } })();
+  if (!response?.ok) return;
+
+  const { state, activeTab, freeLimits } = response;
+  const host = (() => { try { return new URL(activeTab?.url || '').hostname; } catch { return '-'; } })();
   const showSiteHost = await getShowSiteHost();
 
+  const usage = state.usage || { adsBlocked: 0, popupsBlocked: 0 };
+  const paused = response.isBlockingPausedByLimit;
+  const auth = state.auth || {};
+
   document.getElementById('enabledToggle').checked = !!state.enabled;
-  document.getElementById('statusText').textContent = state.enabled ? 'Enabled' : 'Disabled';
-  document.getElementById('totalBlocked').textContent = String(state.stats.adsBlockedTotal || state.stats.blockedTotal || 0);
-  document.getElementById('popupBlocked').textContent = String(state.stats.popupTotal || 0);
+  document.getElementById('statusText').textContent = paused ? 'Paused (monthly limit reached)' : (state.enabled ? 'Enabled' : 'Disabled');
+  document.getElementById('adsMonth').textContent = String(usage.adsBlocked || 0);
+  document.getElementById('popupsMonth').textContent = String(usage.popupsBlocked || 0);
   document.getElementById('siteHost').textContent = showSiteHost ? host : 'Hidden';
   document.getElementById('updatedAt').textContent = `Last rules update: ${fmtDate(state.lastUpdatedAt)}`;
+  document.getElementById('limitUsageText').textContent = `Free plan: ${usage.adsBlocked || 0}/${freeLimits.ads} ads, ${usage.popupsBlocked || 0}/${freeLimits.popups} popups this month.`;
+
+  document.getElementById('limitNotice').style.display = paused ? 'block' : 'none';
+  document.getElementById('loginState').textContent = auth.user?.email ? 'Logged in' : 'Logged out';
+  document.getElementById('paidState').textContent = auth.hasAccess ? 'Paid' : 'Unpaid';
 
   const allowlisted = state.allowlist.includes(host);
   const popupSiteOn = (state.popupBlockSites || []).includes(host);
   document.getElementById('allowlistToggle').checked = allowlisted;
   document.getElementById('popupSiteToggle').checked = popupSiteOn;
   document.getElementById('siteHostToggle').checked = showSiteHost;
-
-  const domainList = document.getElementById('domainList');
-  const domainEntries = Object.entries(response.hostCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  renderCountList(domainList, domainEntries, 'No blocked requests on this tab yet.', ([domain, count]) => {
-    const item = document.createElement('div');
-    item.className = 'domain-card';
-    item.innerHTML = `<div class="stack min0"><div class="domain">${domain}</div><div class="subtle">blocked requests</div></div><div class="count-pill">${count}</div>`;
-    domainList.appendChild(item);
-  });
-
-  const rulesList = document.getElementById('rulesList');
-  const ruleEntries = Object.entries(response.ruleCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  renderCountList(rulesList, ruleEntries, 'No rule hits on this tab yet.', ([rule, count]) => {
-    const item = document.createElement('div');
-    item.className = 'rule-card';
-    item.innerHTML = `<div class="stack min0"><div class="rule-text">${rule}</div><div class="subtle">matched blocking rule</div></div><div class="count-pill">${count}</div>`;
-    rulesList.appendChild(item);
-  });
-
-  const recentList = document.getElementById('recentItems');
-  const recentEntries = (response.recentItems || []).slice(0, 5);
-  renderCountList(recentList, recentEntries, 'No recent blocked items on this tab yet.', (entry) => {
-    const item = document.createElement('div');
-    item.className = 'item-row';
-    item.innerHTML = `
-      <div class="stack min0">
-        <strong>${entry.host || 'Blocked item'}</strong>
-        <div class="hint" title="${entry.url || ''}">${shortenUrl(entry.url || '')}</div>
-      </div>
-      <span class="type-chip">${entry.type || 'request'}</span>`;
-    recentList.appendChild(item);
-  });
 
   document.getElementById('enabledToggle').onchange = async () => {
     await chrome.runtime.sendMessage({ type: 'toggleEnabled' });
@@ -100,15 +64,35 @@ async function render() {
     render();
   };
   document.getElementById('openOptions').onclick = () => chrome.runtime.openOptionsPage();
+  document.getElementById('openDashboard').onclick = () => chrome.runtime.openOptionsPage();
   document.getElementById('openInspector').onclick = async () => {
     await chrome.runtime.sendMessage({ type: 'openInspector', tabId: tabQuery?.id });
     window.close();
   };
   document.getElementById('pickElement').onclick = async () => {
-    if (!tab?.id) return;
-    await chrome.tabs.sendMessage(tab.id, { type: 'startPicker' });
+    if (!activeTab?.id) return;
+    await chrome.tabs.sendMessage(activeTab.id, { type: 'startPicker' });
     window.close();
   };
+  document.getElementById('refreshAccess').onclick = async () => {
+    const res = await chrome.runtime.sendMessage({ type: 'checkAccess' });
+    if (!res?.ok) alert(res?.error || 'Failed to re-sync access');
+    render();
+  };
+  document.getElementById('upgradeNow').onclick = async () => {
+    if (!auth.user?.id) {
+      alert('Please login first from dashboard, then upgrade.');
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+    const res = await chrome.runtime.sendMessage({ type: 'startPaypalPayment' });
+    if (!res?.ok) alert(res?.error || 'Unable to start payment');
+  };
+
+  if (paused && !sessionStorage.getItem('limitAlertShown')) {
+    alert('You have exceeded the monthly free limit (200 ads or 100 popups). Blocking is paused until next month unless you upgrade for a one-time $3 lifetime payment.');
+    sessionStorage.setItem('limitAlertShown', '1');
+  }
 }
 
 render();

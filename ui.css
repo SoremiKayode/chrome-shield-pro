@@ -18,3 +18,6 @@
 .pill.ghost{background:rgba(255,255,255,.14);color:#fff}
 .current-site-card .actions-grid{margin-top:14px}
 .current-site-card .subtle{margin-top:12px}
+.field{width:100%;margin:6px 0;padding:10px 12px;border:1px solid #dce3f0;border-radius:12px;font:inherit}
+.json-box{background:#f3f6fb;border:1px solid #dce3f0;border-radius:12px;padding:12px;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
+.light .pill.ghost{background:#eef1ff;color:#243780}
