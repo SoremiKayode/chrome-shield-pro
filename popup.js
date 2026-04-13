@@ -50,13 +50,14 @@ async function render() {
   const showSiteHost = await getShowSiteHost();
 
   const usage = state.usage || { adsBlocked: 0, popupsBlocked: 0 };
+  const totals = state.stats || { adsBlockedTotal: 0, popupTotal: 0 };
   const paused = response.isBlockingPausedByLimit;
   const auth = state.auth || {};
 
   document.getElementById('enabledToggle').checked = !!state.enabled;
   document.getElementById('statusText').textContent = paused ? 'Paused (monthly limit reached)' : (state.enabled ? 'Enabled' : 'Disabled');
-  document.getElementById('adsMonth').textContent = String(usage.adsBlocked || 0);
-  document.getElementById('popupsMonth').textContent = String(usage.popupsBlocked || 0);
+  document.getElementById('adsMonth').textContent = String(totals.adsBlockedTotal || 0);
+  document.getElementById('popupsMonth').textContent = String(totals.popupTotal || 0);
   document.getElementById('siteHost').textContent = showSiteHost ? host : 'Hidden';
   document.getElementById('updatedAt').textContent = `Last rules update: ${fmtDate(state.lastUpdatedAt)}`;
   document.getElementById('limitUsageText').textContent = `Free plan: ${usage.adsBlocked || 0}/${freeLimits.ads} ads, ${usage.popupsBlocked || 0}/${freeLimits.popups} popups this month.`;
@@ -69,7 +70,6 @@ async function render() {
   const popupSiteOn = hostMatches(host, state.popupBlockSites || []);
   document.getElementById('allowlistToggle').checked = allowlisted;
   document.getElementById('popupSiteToggle').checked = popupSiteOn;
-  document.getElementById('popupSiteToggle').disabled = allowlisted;
   document.getElementById('siteHostToggle').checked = showSiteHost;
 
   document.getElementById('enabledToggle').onchange = async () => {
