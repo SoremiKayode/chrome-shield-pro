@@ -64,6 +64,19 @@ const DEFAULT_STATE = {
 
 let state = structuredClone(DEFAULT_STATE);
 const popupCandidates = new Map();
+let stateLoaded = false;
+let stateLoadPromise = null;
+
+async function ensureStateLoaded() {
+  if (stateLoaded) return;
+  if (!stateLoadPromise) {
+    stateLoadPromise = (async () => {
+      await loadState();
+      stateLoaded = true;
+    })();
+  }
+  await stateLoadPromise;
+}
 
 function nowMonthKey() {
   const now = new Date();
@@ -318,6 +331,7 @@ function bumpTab(tabId, host, ruleText, item, usageKind = 'ad') {
 async function loadState() {
   const stored = await chrome.storage.local.get('state');
   const authStored = await chrome.storage.local.get(['token', 'user', 'productId', 'hasAccess', 'paymentStatus', 'lastSyncTime']);
+  const syncStored = await chrome.storage.sync.get('persistentStats');
   state = { ...structuredClone(DEFAULT_STATE), ...(stored.state || {}) };
   state.customBlockDomains = normalizeDomainList(state.customBlockDomains);
   state.discoveredAdDomains = normalizeDomainList(state.discoveredAdDomains);
@@ -326,6 +340,7 @@ async function loadState() {
   state.popupBlockSites = normalizeDomainList(state.popupBlockSites).map(canonicalHost).filter(Boolean);
   if (!state.stats || typeof state.stats !== 'object') state.stats = { ...DEFAULT_STATE.stats };
   if (!Number.isFinite(state.stats.adsBlockedTotal)) state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
+  mergePersistentStats(syncStored.persistentStats);
   state.auth = {
     ...structuredClone(DEFAULT_STATE.auth),
     ...(state.auth || {}),
@@ -339,8 +354,29 @@ async function loadState() {
   ensureUsageFresh();
 }
 
+async function savePersistentStats() {
+  const stats = state.stats || {};
+  await chrome.storage.sync.set({
+    persistentStats: {
+      blockedTotal: Number(stats.blockedTotal || 0),
+      popupTotal: Number(stats.popupTotal || 0),
+      adsBlockedTotal: Number(stats.adsBlockedTotal || 0),
+      updatedAt: new Date().toISOString()
+    }
+  });
+}
+
+function mergePersistentStats(persistentStats) {
+  if (!persistentStats || typeof persistentStats !== 'object') return;
+  state.stats = state.stats || { ...DEFAULT_STATE.stats };
+  state.stats.blockedTotal = Math.max(Number(state.stats.blockedTotal || 0), Number(persistentStats.blockedTotal || 0));
+  state.stats.popupTotal = Math.max(Number(state.stats.popupTotal || 0), Number(persistentStats.popupTotal || 0));
+  state.stats.adsBlockedTotal = Math.max(Number(state.stats.adsBlockedTotal || 0), Number(persistentStats.adsBlockedTotal || 0));
+}
+
 async function saveState() {
   await chrome.storage.local.set({ state });
+  await savePersistentStats();
 }
 
 const rulesFromDomains = (domains, allowlist = [], priority = 1) => domains.map((domain, idx) => ({
@@ -439,6 +475,8 @@ async function syncAccessIfPossible() {
   try { await checkAccess(); } catch {}
 }
 
+ensureStateLoaded().catch(() => {});
+
 chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
   await rebuildRules();
@@ -465,6 +503,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 chrome.webRequest.onErrorOccurred.addListener(async (details) => {
+  await ensureStateLoaded();
   if (!isBlockingActive()) return;
   if (!details.error || !details.error.includes('ERR_BLOCKED_BY_CLIENT')) return;
   const host = normalizeHost(details.url);
@@ -477,6 +516,7 @@ chrome.webRequest.onErrorOccurred.addListener(async (details) => {
 }, { urls: ['<all_urls>'] });
 
 chrome.tabs.onCreated.addListener(async (tab) => {
+  await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   if (tab.openerTabId == null) return;
 
@@ -505,6 +545,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 });
 
 chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
+  await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
@@ -519,6 +560,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  await ensureStateLoaded();
   if (isBlockingActive() && state.popupBlockingEnabled && (info.url || tab.url) && popupCandidates.has(tabId)) {
     await checkCandidateRedirect(tabId, info.url || tab.url || '');
   }
@@ -531,6 +573,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
+    await ensureStateLoaded();
     if (message.type === 'getState') {
       ensureUsageFresh();
       const requestedTabId = Number.isInteger(message.tabId) ? message.tabId : null;
