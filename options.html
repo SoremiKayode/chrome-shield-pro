@@ -3,19 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chrome Shield Pro Settings</title>
+  <title>CodeIgnite AdBlocker Dashboard</title>
   <link rel="stylesheet" href="ui.css">
 </head>
 <body>
   <main class="options-wrap wide">
-    <section class="card dark"><h1>Chrome Shield Pro Settings</h1><p class="subtle-light">Stronger popup prevention, DNR network blocking, request inspector, top rules, and recent items.</p></section>
+    <section class="card dark">
+      <h1>CodeIgnite AdBlocker Dashboard</h1>
+      <p class="subtle-light">Login, check payment access, load product metadata, and upgrade to lifetime premium.</p>
+      <div id="accountBanner" class="subtle-light"></div>
+    </section>
+
     <section class="card light grid-two">
+      <div>
+        <h2>Sign up</h2>
+        <input id="signupName" class="field" placeholder="Name">
+        <input id="signupEmail" class="field" placeholder="Email">
+        <input id="signupPassword" class="field" type="password" placeholder="Password">
+        <button id="signupBtn" class="pill primary">Create account</button>
+      </div>
+      <div>
+        <h2>Login</h2>
+        <input id="loginEmail" class="field" placeholder="Email">
+        <input id="loginPassword" class="field" type="password" placeholder="Password">
+        <div class="actions-grid" style="grid-template-columns:1fr; margin-top:10px;">
+          <button id="loginBtn" class="pill primary">Login</button>
+          <button id="googleBtn" class="pill secondary">Continue with Google</button>
+          <button id="logoutBtn" class="pill ghost">Logout</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card light">
+      <h2>Product + Access</h2>
+      <div class="actions-grid three">
+        <button id="loadProductBtn" class="pill ghost">Load product metadata</button>
+        <button id="checkAccessBtn" class="pill ghost">Check paid access</button>
+        <button id="upgradeBtn" class="pill primary">Pay $3 one-time (PayPal)</button>
+      </div>
+      <pre id="productMeta" class="json-box">No metadata loaded yet.</pre>
+    </section>
+
+    <section class="card light">
+      <h2>Ad blocker settings</h2>
       <label class="check"><input id="popupBlockingEnabled" type="checkbox"> Block likely ad popups before navigation completes</label>
       <label class="check"><input id="cosmeticBlockingEnabled" type="checkbox"> Enable cosmetic cleanup</label>
+      <textarea id="customBlockDomains" rows="8" placeholder="one domain per line"></textarea>
+      <textarea id="allowlist" rows="6" placeholder="one host per line"></textarea>
+      <textarea id="customCssSelectors" rows="8" placeholder='{"example.com":[".sponsored","#ad-sidebar"]}'></textarea>
+      <div class="actions-grid" style="margin-top:12px">
+        <button id="saveBtn" class="pill primary">Save settings</button>
+        <button id="openInspector" class="pill secondary">Open inspector</button>
+      </div>
     </section>
+
     <section class="card light">
       <h2>Ad websites blacklist manager</h2>
-      <p class="subtle">Use switches to keep or remove domains from the blacklist. Turning off a discovered domain removes it from the list immediately.</p>
       <div class="blacklist-columns">
         <div>
           <h3>Built-in researched ad domains</h3>
@@ -27,22 +70,7 @@
         </div>
       </div>
     </section>
-    <section class="card light">
-      <h2>Custom blocked domains</h2>
-      <textarea id="customBlockDomains" rows="8" placeholder="one domain per line"></textarea>
-    </section>
-    <section class="card light">
-      <h2>Allowlist</h2>
-      <textarea id="allowlist" rows="6" placeholder="one host per line"></textarea>
-    </section>
-    <section class="card light">
-      <h2>Per-site custom CSS selectors</h2>
-      <textarea id="customCssSelectors" rows="8" placeholder='{"example.com":[".sponsored","#ad-sidebar"]}'></textarea>
-    </section>
-    <section class="card light row between stretch-on-mobile">
-      <button id="saveBtn" class="pill primary">Save settings</button>
-      <div class="row gap-sm"><button id="openInspector" class="pill secondary">Open inspector</button></div>
-    </section>
+
     <span id="saveStatus" class="subtle"></span>
   </main>
   <script src="options.js"></script>

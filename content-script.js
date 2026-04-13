@@ -55,7 +55,7 @@
 
   chrome.runtime.sendMessage({ type: 'getState' }, (response) => {
     const state = response?.state;
-    if (!state?.enabled || !state.cosmeticBlockingEnabled) return;
+    if (!state?.enabled || !state.cosmeticBlockingEnabled || response?.isBlockingPausedByLimit) return;
     const host = location.hostname.toLowerCase();
     if (state.allowlist?.includes(host)) return;
     const custom = state.customCssSelectors?.[host] || [];

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chrome Shield Pro</title>
+  <title>CodeIgnite AdBlocker</title>
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="popup-body">
@@ -11,15 +11,34 @@
     <section class="hero card dark">
       <div class="hero-top">
         <div>
-          <div class="eyebrow">CHROME EXTENSION BY CODEIGNITE</div>
-          <h1>Chrome Shield Pro</h1>
+          <div class="eyebrow">CODEIGNITE EXTENSION</div>
+          <h1>CodeIgnite AdBlocker</h1>
         </div>
         <label class="toggle"><input id="enabledToggle" type="checkbox"><span></span></label>
       </div>
       <div class="status-line">Protection <strong id="statusText">Enabled</strong></div>
       <div class="stats-grid">
-        <div class="stat-box"><div class="label">Total blocked</div><div id="totalBlocked" class="value">0</div></div>
-        <div class="stat-box"><div class="label">Popups blocked</div><div id="popupBlocked" class="value">0</div></div>
+        <div class="stat-box"><div class="label">Ads blocked this month</div><div id="adsMonth" class="value">0</div></div>
+        <div class="stat-box"><div class="label">Popups blocked this month</div><div id="popupsMonth" class="value">0</div></div>
+      </div>
+      <div class="subtle subtle-light" id="limitUsageText"></div>
+    </section>
+
+    <section class="card light" id="limitNotice" style="display:none">
+      <div class="section-title no-margin">Monthly free limit reached</div>
+      <p class="subtle">You exceeded 200 ads or 100 popups this month. Blocking is paused until next month unless you upgrade.</p>
+      <button id="upgradeNow" class="pill primary">Pay $3 one-time for lifetime</button>
+    </section>
+
+    <section class="card light">
+      <div class="section-title">Quick status</div>
+      <div class="list compact">
+        <div class="item-row"><strong>Login state</strong><span id="loginState" class="type-chip">Logged out</span></div>
+        <div class="item-row"><strong>Premium access</strong><span id="paidState" class="type-chip">Unpaid</span></div>
+      </div>
+      <div class="actions-grid" style="margin-top:12px">
+        <button id="openDashboard" class="pill primary">Open dashboard</button>
+        <button id="refreshAccess" class="pill ghost">Re-sync access</button>
       </div>
     </section>
 
@@ -45,25 +64,10 @@
 
       <div class="actions-grid three">
         <button id="pickElement" class="pill primary">Pick element</button>
-        <button id="openInspector" class="pill ghost">Request inspector</button>
+        <button id="openInspector" class="pill ghost">Inspector</button>
         <button id="openOptions" class="pill ghost">Settings</button>
       </div>
       <div class="subtle subtle-light" id="updatedAt">Last rules update: -</div>
-    </section>
-
-    <section class="card light">
-      <div class="section-title">Top blocking rules on this tab</div>
-      <div id="rulesList" class="list compact"></div>
-    </section>
-
-    <section class="card light">
-      <div class="section-title">Blocked ad domains on this tab</div>
-      <div id="domainList" class="list compact"></div>
-    </section>
-
-    <section class="card light">
-      <div class="section-title">Recent blocked items</div>
-      <div id="recentItems" class="list compact"></div>
     </section>
   </main>
   <script src="popup.js"></script>
