@@ -69,7 +69,6 @@ async function render() {
   const popupSiteOn = hostMatches(host, state.popupBlockSites || []);
   document.getElementById('allowlistToggle').checked = allowlisted;
   document.getElementById('popupSiteToggle').checked = popupSiteOn;
-  document.getElementById('popupSiteToggle').disabled = allowlisted;
   document.getElementById('siteHostToggle').checked = showSiteHost;
 
   document.getElementById('enabledToggle').onchange = async () => {

@@ -139,7 +139,6 @@ function isAllowed(pageUrl) {
 }
 
 function shouldForcePopupBlock(pageUrl) {
-  if (isAllowed(pageUrl)) return false;
   return hostMatchesList(pageUrl, state.popupBlockSites);
 }
 
@@ -344,22 +343,24 @@ async function saveState() {
   await chrome.storage.local.set({ state });
 }
 
-const rulesFromDomains = (domains, priority = 1) => domains.map((domain, idx) => ({
+const rulesFromDomains = (domains, allowlist = [], priority = 1) => domains.map((domain, idx) => ({
   id: 1000 + idx,
   priority,
   action: { type: 'block' },
   condition: {
     requestDomains: [domain],
+    excludedInitiatorDomains: allowlist,
     resourceTypes: ['main_frame','sub_frame','script','image','xmlhttprequest','stylesheet','font','media']
   }
 }));
 
-const rulesFromPatterns = (patterns, startId = 50000, priority = 1) => patterns.map((pattern, idx) => ({
+const rulesFromPatterns = (patterns, allowlist = [], startId = 50000, priority = 1) => patterns.map((pattern, idx) => ({
   id: startId + idx,
   priority,
   action: { type: 'block' },
   condition: {
     urlFilter: pattern,
+    excludedInitiatorDomains: allowlist,
     resourceTypes: ['main_frame','sub_frame','script','image','xmlhttprequest']
   }
 }));
@@ -368,7 +369,8 @@ async function rebuildRules() {
   ensureUsageFresh();
   const active = isBlockingActive();
   const allDomains = active ? allBlockedDomains() : [];
-  const newRules = active ? [...rulesFromDomains(allDomains), ...rulesFromPatterns(BUILTIN_URL_PATTERNS)] : [];
+  const allowlist = normalizeDomainList(state.allowlist).map(canonicalHost).filter(Boolean);
+  const newRules = active ? [...rulesFromDomains(allDomains, allowlist), ...rulesFromPatterns(BUILTIN_URL_PATTERNS, allowlist)] : [];
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map(r => r.id),
@@ -578,7 +580,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!host) return sendResponse({ ok: false });
       if (state.allowlist.includes(host)) state.allowlist = state.allowlist.filter(h => h !== host);
       else state.allowlist.push(host);
+      state.allowlist = normalizeDomainList(state.allowlist).map(canonicalHost).filter(Boolean);
       await saveState();
+      await rebuildRules();
       sendResponse({ ok: true, allowlist: state.allowlist });
       return;
     }
