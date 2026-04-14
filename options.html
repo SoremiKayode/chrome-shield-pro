@@ -7,57 +7,118 @@
   <link rel="stylesheet" href="ui.css">
 </head>
 <body>
-  <main class="options-wrap wide">
-    <section class="card dark">
+  <main class="options-wrap wide options-dark">
+    <section class="card dark hero-card">
       <h1>CodeIgnite AdBlocker Dashboard</h1>
-      <p class="subtle-light">Login, check payment access, load product metadata, and upgrade to lifetime premium.</p>
-      <div id="accountBanner" class="subtle-light"></div>
+      <p class="subtle-light">Manage account access, tune blocking behavior, and review domain intelligence in one place.</p>
+      <div id="accountBanner" class="subtle-light account-banner"></div>
     </section>
 
-    <section class="card light grid-two">
-      <div>
-        <h2>Sign up</h2>
-        <input id="signupName" class="field" placeholder="Name">
-        <input id="signupEmail" class="field" placeholder="Email">
-        <input id="signupPassword" class="field" type="password" placeholder="Password">
-        <button id="signupBtn" class="pill primary">Create account</button>
-      </div>
-      <div>
-        <h2>Login</h2>
-        <input id="loginEmail" class="field" placeholder="Email">
-        <input id="loginPassword" class="field" type="password" placeholder="Password">
-        <div class="actions-grid" style="grid-template-columns:1fr; margin-top:10px;">
-          <button id="loginBtn" class="pill primary">Login</button>
-          <button id="googleBtn" class="pill secondary">Continue with Google</button>
-          <button id="logoutBtn" class="pill ghost">Logout</button>
+    <section class="card glass auth-card">
+      <div class="row between auth-header">
+        <h2>Account</h2>
+        <div class="tab-switch" role="tablist" aria-label="Authentication Tabs">
+          <button id="authTabLogin" class="tab-btn active" role="tab" aria-selected="true">Login</button>
+          <button id="authTabSignup" class="tab-btn" role="tab" aria-selected="false">Sign Up</button>
         </div>
       </div>
+
+      <div id="loginPanel" class="auth-panel active" role="tabpanel">
+        <div class="form-grid two-col">
+          <label class="field-wrap">
+            <span>Email</span>
+            <input id="loginEmail" class="field dark-input" placeholder="you@example.com" autocomplete="email">
+          </label>
+          <label class="field-wrap">
+            <span>Password</span>
+            <input id="loginPassword" class="field dark-input" type="password" placeholder="••••••••" autocomplete="current-password">
+          </label>
+        </div>
+        <div class="actions-grid two-up">
+          <button id="loginBtn" class="pill primary">Login</button>
+          <button id="googleBtn" class="pill secondary">Continue with Google</button>
+        </div>
+      </div>
+
+      <div id="signupPanel" class="auth-panel" role="tabpanel" hidden>
+        <div class="form-grid three-col">
+          <label class="field-wrap">
+            <span>Name</span>
+            <input id="signupName" class="field dark-input" placeholder="Your name" autocomplete="name">
+          </label>
+          <label class="field-wrap">
+            <span>Email</span>
+            <input id="signupEmail" class="field dark-input" placeholder="you@example.com" autocomplete="email">
+          </label>
+          <label class="field-wrap">
+            <span>Password</span>
+            <input id="signupPassword" class="field dark-input" type="password" placeholder="Create password" autocomplete="new-password">
+          </label>
+        </div>
+        <div class="actions-grid one-up">
+          <button id="signupBtn" class="pill primary">Create account</button>
+        </div>
+      </div>
+
+      <div class="actions-grid two-up auth-footer-actions">
+        <button id="logoutBtn" class="pill ghost" hidden>Logout</button>
+      </div>
     </section>
 
-    <section class="card light">
+    <section class="card glass">
       <h2>Product + Access</h2>
       <div class="actions-grid three">
         <button id="loadProductBtn" class="pill ghost">Load product metadata</button>
         <button id="checkAccessBtn" class="pill ghost">Check paid access</button>
-        <button id="upgradeBtn" class="pill primary">Pay $3 one-time (PayPal)</button>
+        <button id="upgradeBtn" class="pill primary">One time subscription for $3 dollars</button>
       </div>
       <pre id="productMeta" class="json-box">No metadata loaded yet.</pre>
     </section>
 
-    <section class="card light">
-      <h2>Ad blocker settings</h2>
-      <label class="check"><input id="popupBlockingEnabled" type="checkbox"> Block likely ad popups before navigation completes</label>
-      <label class="check"><input id="cosmeticBlockingEnabled" type="checkbox"> Enable cosmetic cleanup</label>
-      <textarea id="customBlockDomains" rows="8" placeholder="one domain per line"></textarea>
-      <textarea id="allowlist" rows="6" placeholder="one host per line"></textarea>
-      <textarea id="customCssSelectors" rows="8" placeholder='{"example.com":[".sponsored","#ad-sidebar"]}'></textarea>
-      <div class="actions-grid" style="margin-top:12px">
-        <button id="saveBtn" class="pill primary">Save settings</button>
+    <section class="card glass settings-card">
+      <div class="row between">
+        <h2>Ad blocker settings</h2>
         <button id="openInspector" class="pill secondary">Open inspector</button>
+      </div>
+
+      <div class="settings-grid">
+        <label class="setting-item">
+          <span>Popup blocking</span>
+          <small>Block likely ad popups before navigation completes.</small>
+          <label class="toggle compact"><input id="popupBlockingEnabled" type="checkbox"><span></span></label>
+        </label>
+
+        <label class="setting-item">
+          <span>Cosmetic cleanup</span>
+          <small>Hide common ad overlays and apply custom cosmetic selectors.</small>
+          <label class="toggle compact"><input id="cosmeticBlockingEnabled" type="checkbox"><span></span></label>
+        </label>
+      </div>
+
+      <div class="editor-grid">
+        <label class="field-wrap full-width">
+          <span>Custom block domains (one per line)</span>
+          <textarea id="customBlockDomains" rows="8" class="dark-input"></textarea>
+        </label>
+
+        <label class="field-wrap full-width">
+          <span>Allowlist hosts (one per line)</span>
+          <textarea id="allowlist" rows="6" class="dark-input"></textarea>
+        </label>
+
+        <label class="field-wrap full-width">
+          <span>Custom CSS selectors (JSON)</span>
+          <textarea id="customCssSelectors" rows="9" class="dark-input code-input" spellcheck="false"></textarea>
+          <pre id="cssSelectorPreview" class="code-preview" aria-live="polite"></pre>
+        </label>
+      </div>
+
+      <div class="actions-grid two-up">
+        <button id="saveBtn" class="pill primary">Save settings</button>
       </div>
     </section>
 
-    <section class="card light">
+    <section class="card glass">
       <h2>Ad websites blacklist manager</h2>
       <div class="blacklist-columns">
         <div>
