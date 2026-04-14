@@ -477,7 +477,7 @@ async function syncAccessIfPossible() {
 
 ensureStateLoaded().catch(() => {});
 
-chrome.runtime.onInstalled.addListener(async () => {
+if (chrome.runtime?.onInstalled) chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
   await rebuildRules();
   chrome.alarms.create('refreshRules', { periodInMinutes: 60 });
@@ -485,13 +485,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   try { await refreshProductMetadata(); } catch {}
 });
 
-chrome.runtime.onStartup.addListener(async () => {
+if (chrome.runtime?.onStartup) chrome.runtime.onStartup.addListener(async () => {
   await loadState();
   await rebuildRules();
   await syncAccessIfPossible();
 });
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
+if (chrome.alarms?.onAlarm) chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'refreshRules') {
     await loadState();
     await rebuildRules();
@@ -502,7 +502,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
-chrome.webRequest.onErrorOccurred.addListener(async (details) => {
+if (chrome.webRequest?.onErrorOccurred) chrome.webRequest.onErrorOccurred.addListener(async (details) => {
   await ensureStateLoaded();
   if (!isBlockingActive()) return;
   if (!details.error || !details.error.includes('ERR_BLOCKED_BY_CLIENT')) return;
@@ -515,7 +515,7 @@ chrome.webRequest.onErrorOccurred.addListener(async (details) => {
   if (isBlockingPausedByLimit()) await rebuildRules();
 }, { urls: ['<all_urls>'] });
 
-chrome.tabs.onCreated.addListener(async (tab) => {
+if (chrome.tabs?.onCreated) chrome.tabs.onCreated.addListener(async (tab) => {
   await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   if (tab.openerTabId == null) return;
@@ -544,7 +544,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   setTimeout(probe, REDIRECT_POLL_MS);
 });
 
-chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
+if (chrome.webNavigation?.onCreatedNavigationTarget) chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
   await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   trackPopupCandidate(details.tabId, details.sourceTabId);
@@ -554,12 +554,12 @@ chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
   await maybeBlockPopupTarget(details.sourceTabId, details.tabId, sourceUrl, details.url || '', forceBlock ? 'blocked-site-popup-policy' : 'blocked-before-load', forceBlock);
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
+if (chrome.tabs?.onRemoved) chrome.tabs.onRemoved.addListener((tabId) => {
   delete state.perTab[tabId];
   dropPopupCandidate(tabId);
 });
 
-chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   await ensureStateLoaded();
   if (isBlockingActive() && state.popupBlockingEnabled && (info.url || tab.url) && popupCandidates.has(tabId)) {
     await checkCandidateRedirect(tabId, info.url || tab.url || '');
@@ -571,7 +571,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+if (chrome.runtime?.onMessage) chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     await ensureStateLoaded();
     if (message.type === 'getState') {
