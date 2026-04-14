@@ -338,7 +338,7 @@ function bumpTab(tabId, host, ruleText, item, usageKind = 'ad') {
 async function loadState() {
   const stored = await chrome.storage.local.get('state');
   const authStored = await chrome.storage.local.get(['token', 'user', 'productId', 'hasAccess', 'paymentStatus', 'lastSyncTime']);
-  const syncStored = await chrome.storage.sync.get('persistentStats');
+  const syncStored = await chrome.storage.sync.get(['persistentStats', 'persistentUsage']);
   state = { ...structuredClone(DEFAULT_STATE), ...(stored.state || {}) };
   state.customBlockDomains = normalizeDomainList(state.customBlockDomains);
   state.discoveredAdDomains = normalizeDomainList(state.discoveredAdDomains);
@@ -348,6 +348,7 @@ async function loadState() {
   if (!state.stats || typeof state.stats !== 'object') state.stats = { ...DEFAULT_STATE.stats };
   if (!Number.isFinite(state.stats.adsBlockedTotal)) state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
   mergePersistentStats(syncStored.persistentStats);
+  mergePersistentUsage(syncStored.persistentUsage);
   state.auth = {
     ...structuredClone(DEFAULT_STATE.auth),
     ...(state.auth || {}),
@@ -373,6 +374,19 @@ async function savePersistentStats() {
   });
 }
 
+async function savePersistentUsage() {
+  ensureUsageFresh();
+  await chrome.storage.sync.set({
+    persistentUsage: {
+      monthKey: state.usage.monthKey || nowMonthKey(),
+      adsBlocked: Number(state.usage.adsBlocked || 0),
+      popupsBlocked: Number(state.usage.popupsBlocked || 0),
+      limitExceeded: !!state.usage.limitExceeded,
+      updatedAt: new Date().toISOString()
+    }
+  });
+}
+
 function mergePersistentStats(persistentStats) {
   if (!persistentStats || typeof persistentStats !== 'object') return;
   state.stats = state.stats || { ...DEFAULT_STATE.stats };
@@ -381,9 +395,23 @@ function mergePersistentStats(persistentStats) {
   state.stats.adsBlockedTotal = Math.max(Number(state.stats.adsBlockedTotal || 0), Number(persistentStats.adsBlockedTotal || 0));
 }
 
+function mergePersistentUsage(persistentUsage) {
+  if (!persistentUsage || typeof persistentUsage !== 'object') return;
+  ensureUsageFresh();
+  const currentMonth = nowMonthKey();
+  const sourceMonth = String(persistentUsage.monthKey || '');
+  if (sourceMonth !== currentMonth) return;
+
+  state.usage.monthKey = currentMonth;
+  state.usage.adsBlocked = Math.max(Number(state.usage.adsBlocked || 0), Number(persistentUsage.adsBlocked || 0));
+  state.usage.popupsBlocked = Math.max(Number(state.usage.popupsBlocked || 0), Number(persistentUsage.popupsBlocked || 0));
+  state.usage.limitExceeded = !!state.usage.limitExceeded || !!persistentUsage.limitExceeded;
+}
+
 async function saveState() {
   await chrome.storage.local.set({ state });
   await savePersistentStats();
+  await savePersistentUsage();
 }
 
 const rulesFromDomains = (domains, allowlist = [], priority = 1) => domains.map((domain, idx) => ({
@@ -487,6 +515,7 @@ ensureStateLoaded().catch(() => {});
 if (chrome.runtime?.onInstalled) chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
   await rebuildRules();
+  await syncAccessIfPossible();
   chrome.alarms.create('refreshRules', { periodInMinutes: 60 });
   chrome.alarms.create('syncAccess', { periodInMinutes: 180 });
   try { await refreshProductMetadata(); } catch {}
