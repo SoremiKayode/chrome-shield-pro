@@ -177,6 +177,12 @@ function isBrowserNewTabUrl(url) {
   return value === 'chrome://newtab/' || value === 'chrome://newtab' || value === 'about:newtab';
 }
 
+function isExtensionInternalUrl(url) {
+  const value = String(url || '').toLowerCase();
+  const ownExtensionBase = chrome.runtime?.id ? `chrome-extension://${chrome.runtime.id}/` : '';
+  return value.startsWith('chrome-extension://') || value.startsWith('edge-extension://') || (ownExtensionBase && value.startsWith(ownExtensionBase));
+}
+
 function ensureTab(tabId) {
   if (tabId < 0) return null;
   state.perTab[tabId] = state.perTab[tabId] || { total: 0, hosts: {}, rules: {}, recent: [], pageUrl: '' };
@@ -295,6 +301,7 @@ async function maybeBlockPopupTarget(sourceTabId, targetTabId, sourceUrl, target
   if (!isBlockingActive()) return false;
   if (!sourceUrl || !targetUrl) return false;
   if (isBrowserNewTabUrl(targetUrl)) return false;
+  if (isExtensionInternalUrl(sourceUrl) || isExtensionInternalUrl(targetUrl)) return false;
   if (!forceBlock && isAllowed(sourceUrl)) return false;
   if (!forceBlock && !remotePopupLikely(sourceUrl, targetUrl)) return false;
 
@@ -519,11 +526,13 @@ if (chrome.tabs?.onCreated) chrome.tabs.onCreated.addListener(async (tab) => {
   await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
   if (tab.openerTabId == null) return;
+  if (isExtensionInternalUrl(tab.pendingUrl || tab.url || '')) return;
 
   trackPopupCandidate(tab.id, tab.openerTabId);
 
   const opener = await chrome.tabs.get(tab.openerTabId).catch(() => null);
   const openerUrl = opener?.url || '';
+  if (isExtensionInternalUrl(openerUrl)) return;
   const forceBlock = shouldForcePopupBlock(openerUrl);
   if (!forceBlock && isAllowed(openerUrl)) return;
 
@@ -547,10 +556,12 @@ if (chrome.tabs?.onCreated) chrome.tabs.onCreated.addListener(async (tab) => {
 if (chrome.webNavigation?.onCreatedNavigationTarget) chrome.webNavigation.onCreatedNavigationTarget.addListener(async (details) => {
   await ensureStateLoaded();
   if (!isBlockingActive() || !state.popupBlockingEnabled) return;
+  if (isExtensionInternalUrl(details.url || '')) return;
   trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
   const sourceUrl = source?.url || '';
   if (isBrowserNewTabUrl(sourceUrl)) return;
+  if (isExtensionInternalUrl(sourceUrl)) return;
   const forceBlock = shouldForcePopupBlock(sourceUrl);
   await maybeBlockPopupTarget(details.sourceTabId, details.tabId, sourceUrl, details.url || '', forceBlock ? 'blocked-site-popup-policy' : 'blocked-before-load', forceBlock);
 });
