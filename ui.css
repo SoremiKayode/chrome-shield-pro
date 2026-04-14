@@ -21,3 +21,5 @@
 .field{width:100%;margin:6px 0;padding:10px 12px;border:1px solid #dce3f0;border-radius:12px;font:inherit}
 .json-box{background:#f3f6fb;border:1px solid #dce3f0;border-radius:12px;padding:12px;white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
 .light .pill.ghost{background:#eef1ff;color:#243780}
+
+.actions-grid.two-up{grid-template-columns:1fr 1fr}

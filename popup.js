@@ -40,6 +40,16 @@ async function setShowSiteHost(showSiteHost) {
   await chrome.storage.local.set({ showSiteHost });
 }
 
+async function startPremiumCheckout(auth) {
+  if (!auth?.user?.id) {
+    alert('Please login first from dashboard, then upgrade.');
+    chrome.runtime.openOptionsPage();
+    return;
+  }
+  const res = await chrome.runtime.sendMessage({ type: 'startPaypalPayment' });
+  if (!res?.ok) alert(res?.error || 'Unable to start payment');
+}
+
 async function render() {
   const [tabQuery] = await chrome.tabs.query({ active: true, currentWindow: true });
   const response = await getState(tabQuery?.id);
@@ -99,19 +109,16 @@ async function render() {
     await chrome.tabs.sendMessage(activeTab.id, { type: 'startPicker' });
     window.close();
   };
+  document.getElementById('subscribePremium').onclick = async () => {
+    await startPremiumCheckout(auth);
+  };
   document.getElementById('refreshAccess').onclick = async () => {
     const res = await chrome.runtime.sendMessage({ type: 'checkAccess' });
     if (!res?.ok) alert(res?.error || 'Failed to re-sync access');
     render();
   };
   document.getElementById('upgradeNow').onclick = async () => {
-    if (!auth.user?.id) {
-      alert('Please login first from dashboard, then upgrade.');
-      chrome.runtime.openOptionsPage();
-      return;
-    }
-    const res = await chrome.runtime.sendMessage({ type: 'startPaypalPayment' });
-    if (!res?.ok) alert(res?.error || 'Unable to start payment');
+    await startPremiumCheckout(auth);
   };
 
   if (paused && !sessionStorage.getItem('limitAlertShown')) {
