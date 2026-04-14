@@ -120,11 +120,25 @@ async function render() {
   document.getElementById('upgradeNow').onclick = async () => {
     await startPremiumCheckout(auth);
   };
+  document.getElementById('blockingUpgradeNow').onclick = async () => {
+    await startPremiumCheckout(auth);
+  };
 
-  if (paused && !sessionStorage.getItem('limitAlertShown')) {
-    alert('You have exceeded the monthly free limit (200 ads or 100 popups). Blocking is paused until next month unless you upgrade for a one-time $3 lifetime payment.');
-    sessionStorage.setItem('limitAlertShown', '1');
+  const blockingScreen = document.getElementById('limitBlockingScreen');
+  const closeLimitOverlayBtn = document.getElementById('closeLimitOverlay');
+  closeLimitOverlayBtn.onclick = () => {
+    sessionStorage.setItem('limitOverlayDismissed', '1');
+    blockingScreen.style.display = 'none';
+  };
+
+  if (!paused) {
+    sessionStorage.removeItem('limitOverlayDismissed');
+    blockingScreen.style.display = 'none';
+    return;
   }
+
+  const overlayDismissed = sessionStorage.getItem('limitOverlayDismissed') === '1';
+  blockingScreen.style.display = overlayDismissed ? 'none' : 'flex';
 }
 
 render();

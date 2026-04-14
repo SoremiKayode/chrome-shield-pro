@@ -7,6 +7,14 @@
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="popup-body">
+  <div id="limitBlockingScreen" class="limit-overlay" style="display:none">
+    <button id="closeLimitOverlay" class="limit-overlay-close" aria-label="Close blocking screen">×</button>
+    <div class="limit-overlay-card">
+      <h2>Monthly limit reached</h2>
+      <p>You have reached your monthly free blocking limit. Upgrade to keep protection active.</p>
+      <button id="blockingUpgradeNow" class="pill primary">Pay $3 one-time for lifetime</button>
+    </div>
+  </div>
   <main class="popup-wrap">
     <section class="hero card dark">
       <div class="hero-top">
