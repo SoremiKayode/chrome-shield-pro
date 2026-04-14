@@ -27,6 +27,8 @@ const FREE_LIMITS = { ads: 200, popups: 100 };
 
 const REDIRECT_OBSERVE_MS = 12000;
 const REDIRECT_POLL_MS = 25;
+const SNAPSHOT_SAVE_MS = 15000;
+const BLOCKING_SNAPSHOT_KEY = 'blockingSnapshot';
 
 const DEFAULT_STATE = {
   enabled: true,
@@ -66,6 +68,7 @@ let state = structuredClone(DEFAULT_STATE);
 const popupCandidates = new Map();
 let stateLoaded = false;
 let stateLoadPromise = null;
+let persistenceIntervalId = null;
 
 async function ensureStateLoaded() {
   if (stateLoaded) return;
@@ -338,7 +341,7 @@ function bumpTab(tabId, host, ruleText, item, usageKind = 'ad') {
 async function loadState() {
   const stored = await chrome.storage.local.get('state');
   const authStored = await chrome.storage.local.get(['token', 'user', 'productId', 'hasAccess', 'paymentStatus', 'lastSyncTime']);
-  const syncStored = await chrome.storage.sync.get(['persistentStats', 'persistentUsage']);
+  const syncStored = await chrome.storage.sync.get(['persistentStats', 'persistentUsage', BLOCKING_SNAPSHOT_KEY]);
   state = { ...structuredClone(DEFAULT_STATE), ...(stored.state || {}) };
   state.customBlockDomains = normalizeDomainList(state.customBlockDomains);
   state.discoveredAdDomains = normalizeDomainList(state.discoveredAdDomains);
@@ -349,6 +352,7 @@ async function loadState() {
   if (!Number.isFinite(state.stats.adsBlockedTotal)) state.stats.adsBlockedTotal = Number(state.stats.blockedTotal || 0);
   mergePersistentStats(syncStored.persistentStats);
   mergePersistentUsage(syncStored.persistentUsage);
+  mergeBlockingSnapshot(syncStored[BLOCKING_SNAPSHOT_KEY]);
   state.auth = {
     ...structuredClone(DEFAULT_STATE.auth),
     ...(state.auth || {}),
@@ -360,6 +364,34 @@ async function loadState() {
     lastSyncTime: authStored.lastSyncTime || state.auth?.lastSyncTime || null
   };
   ensureUsageFresh();
+}
+
+function currentBlockingSnapshot() {
+  ensureUsageFresh();
+  return {
+    stats: {
+      blockedTotal: Number(state.stats?.blockedTotal || 0),
+      popupTotal: Number(state.stats?.popupTotal || 0),
+      adsBlockedTotal: Number(state.stats?.adsBlockedTotal || 0)
+    },
+    usage: {
+      monthKey: state.usage.monthKey || nowMonthKey(),
+      adsBlocked: Number(state.usage.adsBlocked || 0),
+      popupsBlocked: Number(state.usage.popupsBlocked || 0),
+      limitExceeded: !!state.usage.limitExceeded
+    },
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function saveBlockingSnapshot() {
+  await chrome.storage.sync.set({ [BLOCKING_SNAPSHOT_KEY]: currentBlockingSnapshot() });
+}
+
+function mergeBlockingSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  mergePersistentStats(snapshot.stats);
+  mergePersistentUsage(snapshot.usage);
 }
 
 async function savePersistentStats() {
@@ -412,6 +444,14 @@ async function saveState() {
   await chrome.storage.local.set({ state });
   await savePersistentStats();
   await savePersistentUsage();
+  await saveBlockingSnapshot();
+}
+
+function startPeriodicPersistence() {
+  if (persistenceIntervalId != null) return;
+  persistenceIntervalId = setInterval(() => {
+    saveBlockingSnapshot().catch(() => {});
+  }, SNAPSHOT_SAVE_MS);
 }
 
 const rulesFromDomains = (domains, allowlist = [], priority = 1) => domains.map((domain, idx) => ({
@@ -511,6 +551,7 @@ async function syncAccessIfPossible() {
 }
 
 ensureStateLoaded().catch(() => {});
+startPeriodicPersistence();
 
 if (chrome.runtime?.onInstalled) chrome.runtime.onInstalled.addListener(async () => {
   await loadState();
@@ -525,6 +566,11 @@ if (chrome.runtime?.onStartup) chrome.runtime.onStartup.addListener(async () => 
   await loadState();
   await rebuildRules();
   await syncAccessIfPossible();
+  startPeriodicPersistence();
+});
+
+if (chrome.runtime?.onSuspend) chrome.runtime.onSuspend.addListener(() => {
+  saveBlockingSnapshot().catch(() => {});
 });
 
 if (chrome.alarms?.onAlarm) chrome.alarms.onAlarm.addListener(async (alarm) => {
