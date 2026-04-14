@@ -550,6 +550,7 @@ if (chrome.webNavigation?.onCreatedNavigationTarget) chrome.webNavigation.onCrea
   trackPopupCandidate(details.tabId, details.sourceTabId);
   const source = details.sourceTabId >= 0 ? (await chrome.tabs.get(details.sourceTabId).catch(() => null)) : null;
   const sourceUrl = source?.url || '';
+  if (isBrowserNewTabUrl(sourceUrl)) return;
   const forceBlock = shouldForcePopupBlock(sourceUrl);
   await maybeBlockPopupTarget(details.sourceTabId, details.tabId, sourceUrl, details.url || '', forceBlock ? 'blocked-site-popup-policy' : 'blocked-before-load', forceBlock);
 });
