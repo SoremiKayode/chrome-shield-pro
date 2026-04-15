@@ -140,19 +140,30 @@
     return opened;
   };
 
-  chrome.runtime.sendMessage({ type: 'getState' }, (response) => {
-    const state = response?.state;
-    const host = location.hostname.toLowerCase();
-    guardState.ready = true;
-    guardState.blockedDomains = [
-      ...(response?.enabledBuiltinAdDomains || []),
-      ...(state?.customBlockDomains || []),
-      ...(state?.discoveredAdDomains || [])
-    ];
-    guardState.allowlisted = hostMatches(host, state?.allowlist || []);
-    guardState.forcePopupBlock = hostMatches(host, state?.popupBlockSites || []);
-    guardState.enabled = !!(state?.enabled && state?.popupBlockingEnabled && !response?.isBlockingPausedByLimit) && !guardState.allowlisted;
-  });
+  const loadGuardState = () => {
+    const sendMessage = globalThis.chrome?.runtime?.sendMessage;
+    if (typeof sendMessage !== 'function') {
+      guardState.ready = true;
+      guardState.enabled = false;
+      return;
+    }
+
+    sendMessage({ type: 'getState' }, (response) => {
+      const state = response?.state;
+      const host = location.hostname.toLowerCase();
+      guardState.ready = true;
+      guardState.blockedDomains = [
+        ...(response?.enabledBuiltinAdDomains || []),
+        ...(state?.customBlockDomains || []),
+        ...(state?.discoveredAdDomains || [])
+      ];
+      guardState.allowlisted = hostMatches(host, state?.allowlist || []);
+      guardState.forcePopupBlock = hostMatches(host, state?.popupBlockSites || []);
+      guardState.enabled = !!(state?.enabled && state?.popupBlockingEnabled && !response?.isBlockingPausedByLimit) && !guardState.allowlisted;
+    });
+  };
+
+  loadGuardState();
 
   const nativeAnchorClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function() {
