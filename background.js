@@ -19,9 +19,11 @@ const BUILTIN_COSMETIC = [
   '.cookie-banner-ad','.newsletter-popup','.sticky-ad','.ad-slot','.banner-ad'
 ];
 
-const API_BASE_URL = 'https://addblocker.codesignite.com/api';
+const CORE_API_BASE_URL = 'https://api.codesigite.com';
+const WEBSITE_BASE_URL = 'https://addblocker.codesignite.com';
+const WEBSITE_API_BASE_URL = `${WEBSITE_BASE_URL}/api`;
 const PRODUCT_ID = 'prod_adblocker_001';
-const SOCIAL_LOGIN_URL = 'https://addblocker.codesignite.com/social-login';
+const SOCIAL_LOGIN_URL = `${WEBSITE_BASE_URL}/social-login`;
 const PREMIUM_PRICE_USD = 3;
 const FREE_LIMITS = { ads: 200, popups: 100 };
 
@@ -273,14 +275,14 @@ async function setAuthStorage(auth) {
   });
 }
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(path, options = {}, baseUrl = CORE_API_BASE_URL) {
   const token = state.auth?.token;
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {})
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const res = await fetch(`${baseUrl}${path}`, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
   return data;
@@ -288,10 +290,10 @@ async function apiFetch(path, options = {}) {
 
 async function refreshProductMetadata() {
   try {
-    const data = await apiFetch(`/products/${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' });
+    const data = await apiFetch(`/products/${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' }, WEBSITE_API_BASE_URL);
     state.product = data.product || data;
   } catch {
-    const fallback = await apiFetch(`/products/plugin-metadata?productId=${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' });
+    const fallback = await apiFetch(`/products/plugin-metadata?productId=${encodeURIComponent(PRODUCT_ID)}`, { method: 'GET' }, WEBSITE_API_BASE_URL);
     state.product = fallback.product || fallback;
   }
   state.auth.productId = PRODUCT_ID;
@@ -303,7 +305,7 @@ async function refreshProductMetadata() {
 async function checkAccess() {
   if (!state.auth?.user?.id) return { hasAccess: false };
   const query = `?userId=${encodeURIComponent(state.auth.user.id)}&productId=${encodeURIComponent(PRODUCT_ID)}`;
-  const data = await apiFetch(`/payments/check-access${query}`, { method: 'GET' });
+  const data = await apiFetch(`/payments/check-access${query}`, { method: 'GET' }, WEBSITE_API_BASE_URL);
   state.auth.hasAccess = !!data.hasAccess;
   state.auth.paymentStatus = data.hasAccess ? 'paid' : 'unpaid';
   state.auth.lastSyncTime = new Date().toISOString();
@@ -710,7 +712,7 @@ if (chrome.runtime?.onMessage) chrome.runtime.onMessage.addListener((message, se
         usage: state.usage,
         isBlockingPausedByLimit: isBlockingPausedByLimit(),
         premiumPriceUsd: PREMIUM_PRICE_USD,
-        apiBaseUrl: API_BASE_URL
+        apiBaseUrl: CORE_API_BASE_URL
       });
       return;
     }
@@ -866,7 +868,7 @@ if (chrome.runtime?.onMessage) chrome.runtime.onMessage.addListener((message, se
       const data = await apiFetch('/payments/paypal/create-order', {
         method: 'POST',
         body: JSON.stringify({ userId: state.auth.user.id, productId: PRODUCT_ID })
-      });
+      }, WEBSITE_API_BASE_URL);
       if (data.approvalUrl) await chrome.tabs.create({ url: data.approvalUrl });
       sendResponse({ ok: true, data });
       return;
@@ -876,7 +878,7 @@ if (chrome.runtime?.onMessage) chrome.runtime.onMessage.addListener((message, se
       const data = await apiFetch('/payments/paypal/capture-order', {
         method: 'POST',
         body: JSON.stringify({ userId: state.auth.user.id, productId: PRODUCT_ID, orderId: message.orderId })
-      });
+      }, WEBSITE_API_BASE_URL);
       if (data.success) {
         state.auth.hasAccess = true;
         state.auth.paymentStatus = 'paid';
