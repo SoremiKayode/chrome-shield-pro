@@ -15,8 +15,8 @@
 
   function removeCommonOverlays() {
     const selectors = [
-      '[class*="cookie"][class*="banner"]','[class*="newsletter"]','[class*="subscribe-popup"]',
-      '[class*="overlay"]','[class*="modal"]','[class*="sticky-ad"]','[id*="ad-"]'
+      '[class*="ad-overlay"]','[class*="overlay-ad"]','[class*="sponsor"]','[class*="promoted"]',
+      '[class*="sticky-ad"]','[class*="ad-slot"]','[id^="ad-"]','[id*="-ad-"]'
     ];
     for (const sel of selectors) {
       document.querySelectorAll(sel).forEach((el) => {
