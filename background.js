@@ -66,6 +66,7 @@ const DEFAULT_STATE = {
 
 let state = structuredClone(DEFAULT_STATE);
 const popupCandidates = new Map();
+const popupEventDeduper = new Map();
 let stateLoaded = false;
 let stateLoadPromise = null;
 let persistenceIntervalId = null;
@@ -225,6 +226,19 @@ function trackPopupCandidate(tabId, sourceTabId) {
 
 function dropPopupCandidate(tabId) {
   popupCandidates.delete(tabId);
+}
+
+function shouldCountPopupEvent(tabId, url) {
+  const key = `${Number.isInteger(tabId) ? tabId : -1}|${String(url || '')}`;
+  const now = Date.now();
+  const prev = popupEventDeduper.get(key) || 0;
+  popupEventDeduper.set(key, now);
+  if (popupEventDeduper.size > 2000) {
+    for (const [entryKey, ts] of popupEventDeduper.entries()) {
+      if ((now - ts) > 60_000) popupEventDeduper.delete(entryKey);
+    }
+  }
+  return (now - prev) > 1500;
 }
 
 function learnAdDomain(url) {
@@ -588,6 +602,8 @@ if (chrome.webRequest?.onErrorOccurred) chrome.webRequest.onErrorOccurred.addLis
   await ensureStateLoaded();
   if (!isBlockingActive()) return;
   if (!details.error || !details.error.includes('ERR_BLOCKED_BY_CLIENT')) return;
+  if (!Number.isInteger(details.tabId) || details.tabId < 0) return;
+  if (isExtensionInternalUrl(details.url || '')) return;
   const host = normalizeHost(details.url);
   const ruleText = inferRule(details.url);
   const item = { host, url: details.url, type: details.type || 'request', action: 'blocked' };
@@ -762,10 +778,13 @@ if (chrome.runtime?.onMessage) chrome.runtime.onMessage.addListener((message, se
     }
     if (message.type === 'popupBlocked') {
       if (!isBlockingActive()) return sendResponse({ ok: true, skipped: true });
+      const tabId = sender.tab?.id ?? -1;
+      if (!shouldCountPopupEvent(tabId, message.url || '')) {
+        return sendResponse({ ok: true, deduped: true });
+      }
       state.stats.popupTotal += 1;
       const host = normalizeHost(message.url || '');
       const ruleText = inferRule(message.url || '');
-      const tabId = sender.tab?.id ?? -1;
       const item = { host, url: message.url || '', type: 'popup', action: 'blocked-in-page' };
       bumpTab(tabId, host, ruleText, item, 'popup');
       pushLog({ tabId, ruleText, ...item });

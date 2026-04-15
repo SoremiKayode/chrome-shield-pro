@@ -1,5 +1,15 @@
 (() => {
-  const adHostRegex = /(doubleclick|googlesyndication|googleadservices|taboola|outbrain|criteo|adnxs|rubicon|pubmatic|adsrvr|promo|banner|pop(ad|up)?|trk|track|sponsor)/i;
+  const adHostRegex = /(doubleclick|googlesyndication|googleadservices|taboola|outbrain|criteo|adnxs|rubicon|pubmatic|adsrvr|adservice|adserver|adclick|popads?|popunder|affiliate|sponsor|mgid|revcontent|adsterra|trafficstars|clickadu)/i;
+  const adPathRegex = /([/?#&._-])(ad[sx]?|adclick|adserver|adservice|sponsor|affiliate|promo|banner|popunder|popup|clickid|utm_(source|campaign)=ads?)\b/i;
+  const adQueryRegex = /(?:^|[?&])(ad(id|s)?|adunit|adserver|adsource|clickid|gclid|yclid|fbclid|utm_source=ad)/i;
+
+  const guardState = {
+    ready: false,
+    enabled: false,
+    forcePopupBlock: false,
+    allowlisted: false,
+    blockedDomains: []
+  };
 
   const base = (input) => {
     try {
@@ -16,12 +26,34 @@
     return !!one && one === two;
   };
 
+  const normalize = (hostOrUrl) => {
+    try {
+      const parsed = new URL(hostOrUrl, location.href);
+      const host = parsed.hostname.toLowerCase();
+      return base(host) || host;
+    } catch {
+      const host = String(hostOrUrl || '').toLowerCase();
+      return base(host) || host;
+    }
+  };
+
+  const hostMatches = (hostOrUrl, entries = []) => {
+    const target = normalize(hostOrUrl);
+    return (entries || []).some((entry) => {
+      const normalized = normalize(entry);
+      return normalized && (target === normalized || target.endsWith(`.${normalized}`));
+    });
+  };
+
   const adLike = (target) => {
     try {
       const url = new URL(target, location.href);
-      return adHostRegex.test(url.hostname) || /(ad|popup|banner|promo|sponsor)/i.test(url.href);
+      const host = url.hostname.toLowerCase();
+      if (hostMatches(host, guardState.blockedDomains)) return true;
+      return adHostRegex.test(host) || adPathRegex.test(url.href) || adQueryRegex.test(url.search);
     } catch {
-      return /(ad|popup|banner|promo|sponsor)/i.test(String(target || ''));
+      const value = String(target || '');
+      return adHostRegex.test(value) || adPathRegex.test(value);
     }
   };
 
@@ -36,11 +68,12 @@
   };
 
   const shouldBlock = (target) => {
+    if (!guardState.ready || !guardState.enabled) return false;
     if (isBrowserNewTab(target)) return false;
     try {
       const absolute = new URL(target, location.href).href;
       if (sameBase(location.href, absolute)) return false;
-      return adLike(absolute);
+      return guardState.forcePopupBlock ? true : adLike(absolute);
     } catch {
       return false;
     }
@@ -106,6 +139,20 @@
     }
     return opened;
   };
+
+  chrome.runtime.sendMessage({ type: 'getState' }, (response) => {
+    const state = response?.state;
+    const host = location.hostname.toLowerCase();
+    guardState.ready = true;
+    guardState.blockedDomains = [
+      ...(response?.enabledBuiltinAdDomains || []),
+      ...(state?.customBlockDomains || []),
+      ...(state?.discoveredAdDomains || [])
+    ];
+    guardState.allowlisted = hostMatches(host, state?.allowlist || []);
+    guardState.forcePopupBlock = hostMatches(host, state?.popupBlockSites || []);
+    guardState.enabled = !!(state?.enabled && state?.popupBlockingEnabled && !response?.isBlockingPausedByLimit) && !guardState.allowlisted;
+  });
 
   const nativeAnchorClick = HTMLAnchorElement.prototype.click;
   HTMLAnchorElement.prototype.click = function() {
