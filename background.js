@@ -19,9 +19,9 @@ const BUILTIN_COSMETIC = [
   '.cookie-banner-ad','.newsletter-popup','.sticky-ad','.ad-slot','.banner-ad'
 ];
 
-const API_BASE_URL = 'https://api.codesignite.com/api';
+const API_BASE_URL = 'https://addblocker.codesignite.com/api';
 const PRODUCT_ID = 'prod_adblocker_001';
-const SOCIAL_LOGIN_URL = 'https://api.codesignite.com/social-login';
+const SOCIAL_LOGIN_URL = 'https://addblocker.codesignite.com/social-login';
 const PREMIUM_PRICE_USD = 3;
 const FREE_LIMITS = { ads: 200, popups: 100 };
 
