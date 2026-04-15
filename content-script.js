@@ -49,8 +49,27 @@
     });
   }
 
+  function getRuntime() {
+    const runtime = globalThis.chrome?.runtime;
+    return runtime?.id ? runtime : null;
+  }
+
+  function sendRuntimeMessage(message, callback) {
+    const runtime = getRuntime();
+    if (!runtime?.sendMessage) return false;
+    try {
+      runtime.sendMessage(message, (...args) => {
+        if (globalThis.chrome?.runtime?.lastError) return;
+        callback?.(...args);
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   document.addEventListener('chrome-shield-popup-blocked', (ev) => {
-    chrome.runtime.sendMessage({ type: 'popupBlocked', url: ev.detail?.url || '' });
+    sendRuntimeMessage({ type: 'popupBlocked', url: ev.detail?.url || '' });
   });
 
   function baseDomain(host) {
@@ -66,7 +85,7 @@
     });
   }
 
-  chrome.runtime.sendMessage({ type: 'getState' }, (response) => {
+  sendRuntimeMessage({ type: 'getState' }, (response) => {
     const state = response?.state;
     if (!state?.enabled || !state.cosmeticBlockingEnabled || response?.isBlockingPausedByLimit) return;
     const host = location.hostname.toLowerCase();
@@ -82,7 +101,10 @@
     new MutationObserver(() => { removeCommonOverlays(); ellipsisLoggerHints(); }).observe(document.documentElement, { childList: true, subtree: true });
   });
 
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const runtime = getRuntime();
+  if (!runtime?.onMessage?.addListener) return;
+
+  runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'startPicker') {
       if (pickerEnabled) return;
       pickerEnabled = true;
@@ -98,7 +120,7 @@
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
         const selector = el.id ? `#${CSS.escape(el.id)}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].slice(0,3).map(CSS.escape).join('.') : ''}`;
-        chrome.runtime.sendMessage({ type: 'elementPicked', host: location.hostname.toLowerCase(), selector });
+        sendRuntimeMessage({ type: 'elementPicked', host: location.hostname.toLowerCase(), selector });
         el.style.display = 'none';
         cleanup();
       };
